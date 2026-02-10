@@ -82,7 +82,7 @@ class GmailExtractor:
     # ------------------------------------------------------------------
 
     def search_emails(self, after_date: str = "2020/01/01") -> list[str]:
-        """Search for all Daily Results emails from cresta-run.com.
+        """Search for all emails from cresta-run.com.
 
         Args:
             after_date: Only find emails after this date (YYYY/MM/DD format).
@@ -90,7 +90,7 @@ class GmailExtractor:
         Returns:
             List of Gmail message IDs.
         """
-        query = f'subject:"Daily Results" from:@cresta-run.com after:{after_date}'
+        query = f"from:cresta-run.com after:{after_date}"
         message_ids: list[str] = []
         page_token = None
 
@@ -109,7 +109,7 @@ class GmailExtractor:
             if not page_token:
                 break
 
-        logger.info("Found %d Daily Results emails", len(message_ids))
+        logger.info("Found %d emails from cresta-run.com", len(message_ids))
         return message_ids
 
     # ------------------------------------------------------------------
@@ -162,10 +162,10 @@ class GmailExtractor:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def extract_results_link(html_body: str) -> str | None:
-        """Extract the results PDF link from email HTML.
+    def extract_pdf_link(html_body: str) -> str | None:
+        """Extract a PDF link from email HTML.
 
-        Finds "click here"/"here" anchors in "results" context.
+        Finds "click here"/"here" anchors pointing to results/practice PDFs.
         Skips draw links. Also recognises direct CDN URLs.
         """
         soup = BeautifulSoup(html_body, "lxml")
@@ -185,11 +185,11 @@ class GmailExtractor:
             ):
                 return href
 
-            # Strategy 2: "click here" / "here" in context of "results"
+            # Strategy 2: "click here" / "here" — skip draws and unsubscribe
             if (
                 link_text in ("click here", "here")
-                and "result" in parent_text
                 and "draw" not in parent_text
+                and "unsubscribe" not in parent_text
             ):
                 return href
 
@@ -370,11 +370,11 @@ class GmailExtractor:
                     time.sleep(0.1)
                     continue
 
-                link = self.extract_results_link(html)
+                link = self.extract_pdf_link(html)
                 entry["extracted_link"] = link
                 if not link:
-                    entry["error"] = "No results link"
-                    logger.warning("  No results link found")
+                    entry["error"] = "No PDF link"
+                    logger.warning("  No PDF link found")
                     summary["failed"] += 1
                     log.append(entry)
                     time.sleep(0.1)

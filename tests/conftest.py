@@ -33,3 +33,8 @@ def email_no_link(fixtures_dir):
 @pytest.fixture()
 def email_both(fixtures_dir):
     return (fixtures_dir / "email_both_results_and_draw.html").read_text()
+
+
+@pytest.fixture()
+def email_practice_direct_cdn(fixtures_dir):
+    return (fixtures_dir / "email_practice_direct_cdn.html").read_text()

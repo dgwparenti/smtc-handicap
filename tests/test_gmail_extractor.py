@@ -17,29 +17,29 @@ from smtc_handicap.gmail_extractor import GmailExtractor
 # ======================================================================
 
 
-class TestExtractResultsLink:
+class TestExtractPdfLink:
     def test_mailchimp_link(self, email_mailchimp):
-        link = GmailExtractor.extract_results_link(email_mailchimp)
+        link = GmailExtractor.extract_pdf_link(email_mailchimp)
         assert link is not None
         assert "list-manage.com/track/click" in link
         assert "abc123" in link
 
     def test_direct_cdn_link(self, email_direct_cdn):
-        link = GmailExtractor.extract_results_link(email_direct_cdn)
+        link = GmailExtractor.extract_pdf_link(email_direct_cdn)
         assert link is not None
         assert "cdn.prod.website-files.com" in link
         assert link.endswith(".pdf")
 
     def test_skip_draw_only(self, email_draw_only):
-        link = GmailExtractor.extract_results_link(email_draw_only)
+        link = GmailExtractor.extract_pdf_link(email_draw_only)
         assert link is None
 
     def test_no_link(self, email_no_link):
-        link = GmailExtractor.extract_results_link(email_no_link)
+        link = GmailExtractor.extract_pdf_link(email_no_link)
         assert link is None
 
     def test_both_results_and_draw(self, email_both):
-        link = GmailExtractor.extract_results_link(email_both)
+        link = GmailExtractor.extract_pdf_link(email_both)
         assert link is not None
         assert "draw" not in link.lower()
         # Should pick the results PDF, not the draw
@@ -53,7 +53,7 @@ class TestExtractResultsLink:
         </p>
         </body></html>
         """
-        link = GmailExtractor.extract_results_link(html)
+        link = GmailExtractor.extract_pdf_link(html)
         assert link is not None
 
     def test_encoded_cdn_url(self):
@@ -64,8 +64,26 @@ class TestExtractResultsLink:
         </p>
         </body></html>
         """
-        link = GmailExtractor.extract_results_link(html)
+        link = GmailExtractor.extract_pdf_link(html)
         assert link is not None
+        assert link.endswith(".pdf")
+
+    def test_practice_link(self):
+        html = """
+        <html><body>
+        <p>For today's practice please
+          <a href="https://cresta-run.us18.list-manage.com/track/click?u=x&id=y">click here</a>
+        </p>
+        </body></html>
+        """
+        link = GmailExtractor.extract_pdf_link(html)
+        assert link is not None
+        assert "list-manage.com/track/click" in link
+
+    def test_practice_direct_cdn(self, email_practice_direct_cdn):
+        link = GmailExtractor.extract_pdf_link(email_practice_direct_cdn)
+        assert link is not None
+        assert "cdn.prod.website-files.com" in link
         assert link.endswith(".pdf")
 
 

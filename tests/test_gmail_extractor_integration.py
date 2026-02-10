@@ -51,7 +51,7 @@ class TestEmailContent:
         html = extractor.get_email_html(ids[0])
         assert html is not None
 
-        link = extractor.extract_results_link(html)
+        link = extractor.extract_pdf_link(html)
         # Link may be None for cancellation emails, but most should have one
         if link is not None:
             assert "http" in link
@@ -66,7 +66,7 @@ class TestResolveAndDownload:
         for msg_id in ids[:10]:
             html = extractor.get_email_html(msg_id)
             if html:
-                link = extractor.extract_results_link(html)
+                link = extractor.extract_pdf_link(html)
                 if link:
                     resolved = extractor.resolve_pdf_url(link)
                     assert resolved.lower().endswith(".pdf") or "cdn" in resolved
@@ -81,7 +81,7 @@ class TestResolveAndDownload:
         for msg_id in ids[:10]:
             html = extractor.get_email_html(msg_id)
             if html:
-                link = extractor.extract_results_link(html)
+                link = extractor.extract_pdf_link(html)
                 if link:
                     pdf_url = extractor.resolve_pdf_url(link)
                     extractor.output_dir = tmp_path

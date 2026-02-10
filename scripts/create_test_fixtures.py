@@ -36,7 +36,7 @@ def main() -> None:
             continue
 
         subject = metadata["subject"]
-        link = extractor.extract_results_link(html)
+        link = extractor.extract_pdf_link(html)
 
         # Determine fixture type
         if link and "list-manage.com" in link:
