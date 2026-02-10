@@ -286,7 +286,11 @@ class GmailExtractor:
             logger.info("  Already exists: %s", clean_name)
             return output_path
 
-        response = requests.get(pdf_url, timeout=30)
+        try:
+            response = requests.get(pdf_url, timeout=30)
+        except requests.exceptions.SSLError:
+            logger.warning("SSL verification failed for download — retrying without verification")
+            response = requests.get(pdf_url, timeout=30, verify=False)
         response.raise_for_status()
 
         if response.content[:5] != b"%PDF-":

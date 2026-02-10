@@ -301,6 +301,30 @@ class TestDownloadPdf:
 
         assert result is None
 
+    @patch("smtc_handicap.gmail_extractor.requests.get")
+    def test_ssl_error_fallback(self, mock_get, tmp_path):
+        """SSL failure on first download attempt retries with verify=False."""
+        pdf_url = "https://cdn.prod.website-files.com/x/abc_20260123%20pt.pdf"
+        pdf_content = b"%PDF-1.4 fake pdf content"
+
+        ssl_error = requests.exceptions.SSLError("certificate verify failed")
+        ok_response = requests.models.Response()
+        ok_response.status_code = 200
+        ok_response._content = pdf_content
+
+        mock_get.side_effect = [ssl_error, ok_response]
+
+        extractor = _make_extractor(tmp_path)
+        result = extractor.download_pdf(pdf_url)
+
+        assert result is not None
+        assert result.read_bytes() == pdf_content
+        assert mock_get.call_count == 2
+        first_call = mock_get.call_args_list[0]
+        second_call = mock_get.call_args_list[1]
+        assert first_call.kwargs.get("verify", True) is not False
+        assert second_call.kwargs.get("verify") is False
+
     @responses.activate
     def test_creates_output_dir(self, tmp_path):
         output_dir = tmp_path / "sub" / "dir"
