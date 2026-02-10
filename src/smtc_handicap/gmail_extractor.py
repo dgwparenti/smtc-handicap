@@ -209,6 +209,11 @@ class GmailExtractor:
             response = requests.head(url, allow_redirects=True, timeout=15)
             response.raise_for_status()
             return response.url
+        except requests.exceptions.SSLError:
+            logger.warning("SSL verification failed for %s — retrying without verification", url)
+            response = requests.head(url, allow_redirects=True, timeout=15, verify=False)
+            response.raise_for_status()
+            return response.url
         except requests.RequestException:
             response = requests.get(url, allow_redirects=True, timeout=15, stream=True)
             response.raise_for_status()

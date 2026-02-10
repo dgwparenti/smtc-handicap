@@ -7,6 +7,7 @@ import json
 from pathlib import Path
 from unittest.mock import patch
 
+import requests
 import responses
 
 from smtc_handicap.gmail_extractor import GmailExtractor
@@ -106,6 +107,28 @@ class TestResolvePdfUrl:
 
         result = GmailExtractor.resolve_pdf_url(mailchimp_url)
         assert result == cdn_url
+
+    @patch("smtc_handicap.gmail_extractor.requests.head")
+    def test_ssl_error_fallback(self, mock_head):
+        """SSL failure on first attempt retries with verify=False."""
+        mailchimp_url = "https://cresta-run.us18.list-manage.com/track/click?u=abc"
+        cdn_url = "https://cdn.prod.website-files.com/results.pdf"
+
+        ssl_error = requests.exceptions.SSLError("certificate verify failed")
+        ok_response = requests.models.Response()
+        ok_response.status_code = 200
+        ok_response.url = cdn_url
+
+        mock_head.side_effect = [ssl_error, ok_response]
+
+        result = GmailExtractor.resolve_pdf_url(mailchimp_url)
+
+        assert result == cdn_url
+        assert mock_head.call_count == 2
+        first_call = mock_head.call_args_list[0]
+        second_call = mock_head.call_args_list[1]
+        assert first_call.kwargs.get("verify", True) is not False
+        assert second_call.kwargs.get("verify") is False
 
 
 # ======================================================================
