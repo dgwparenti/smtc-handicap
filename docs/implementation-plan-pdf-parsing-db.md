@@ -113,7 +113,7 @@ class TimeRecord:
     race_id: str           # FK → Race
     rider_id: str          # FK → Rider
     run_number: int        # 1-based
-    # Splits (populated from Split Results section)
+    # Splits (populated from Split Results section if present; remain None for older PDFs without splits)
     start_time: datetime.time | None = None   # clock time, e.g. 09:34:56
     split_junction: float | None = None       # seconds (0.0 if started from Junction)
     split_rise: float | None = None
@@ -338,6 +338,8 @@ def parse_pdf(filepath: Path) -> ParsedPDF:
     # 2. Extract all text lines from all pages (pdfplumber)
     # 3. Detect sections (headers → typed Section objects)
     # 4. Parse each section → Race, Rider, TimeRecord objects
+    #    Note: Step 4 conditionally parses SPLIT sections only when detected.
+    #    Absence of a Split Results section is normal for older PDFs (~2020).
     # 5. Return ParsedPDF container
 
 @dataclass
@@ -368,7 +370,7 @@ Each PDF has multiple sections. Detect them by scanning for header patterns:
 | **Practice** | Line matches `^PRACTICE\s*-\s*(TOP\|JUNCTION)$` |
 | **Race (Handicap)** | Line matches a race name pattern (e.g. `THE STAGNI CUP`) AND the first few data lines contain `H'Cap` |
 | **Race (Non-Handicap)** | Same race name pattern but NO `H'Cap` column |
-| **Split Results** | Line matches `^Split\s+Results?$` |
+| **Split Results** | Line matches `^Split\s+Results?$` (**optional** — older PDFs from ~2020 do not have this section) |
 | **Metadata** | Line contains "Fastest Time" or "Fastest Speed" (skip these) |
 
 Race name regex:
@@ -477,6 +479,8 @@ Same as handicap but:
 def parse_split_section(section, race_date, existing_records) -> list[TimeRecord]:
 ```
 
+**Guard clause**: If no SPLIT section is detected during section detection, skip the merge step entirely. TimeRecords from race/practice parsers are complete and valid without split data — this is the expected case for older PDFs (~2020).
+
 **Row format**: `Name    Start    Junction    Rise    Stream    Bulpetts    Finish    MPH`
 
 This section **merges into existing TimeRecords** (already parsed from race/practice sections):
@@ -498,6 +502,7 @@ This section **merges into existing TimeRecords** (already parsed from race/prac
 | `- 2 -` page break | Filtered out during text extraction |
 | Empty line / dashes line | Skip during row parsing |
 | Multi-page tables | Handled by extracting ALL pages first, then detecting sections across the full text |
+| No splits section in PDF | Split fields remain None on all TimeRecords; no warning needed, this is expected for older PDFs (~2020) |
 
 ---
 
@@ -549,6 +554,14 @@ def ingest_all_pdfs(pdf_dir: Path, db_path: Path) -> IngestStats:
 | `test_models.py` | Dataclass defaults, construction, required fields | ~5 |
 | `test_db.py` | Insert/upsert/get for all 3 tables, duplicate handling, FK constraints, upsert merge logic | ~10 |
 | `test_pdf_parser.py` | `parse_time_cell()`, `split_row_into_columns()`, section detection with synthetic text | ~10 |
+
+### PDFs without splits (older ~2020 PDFs)
+
+| Test Case | What's Tested |
+|---|---|
+| Section detection returns no SPLIT section | `detect_sections()` on text without a Split Results header produces no SPLIT-type section |
+| TimeRecords have all split fields as None | Parsing a PDF without splits yields TimeRecords where `start_time`, `split_junction`, `split_rise`, `split_stream`, `split_bulpetts`, and `speed_mph` are all None |
+| Full pipeline succeeds without splits | `ingest_single_pdf()` completes successfully and stores valid data when the PDF has no Split Results section |
 
 ### Integration tests (require real PDFs in `tests/fixtures/`)
 
@@ -622,3 +635,18 @@ Target: 90%+ of PDFs parsed successfully (per PRD success criteria).
 | 6 | `src/smtc_handicap/pdf_parser.py` + `tests/test_pdf_parser.py` | models.py, name_normalizer.py |
 | 7 | `src/smtc_handicap/pipeline.py` + scripts + `tests/conftest.py` | all above |
 | 8 | Integration test with real PDF + verification | all above |
+
+---
+
+## 11. Incremental Ingestion (Cross-Reference)
+
+The incremental update workflow (see `docs/implementation-plan-incremental-update.md`) adds the following to the components defined above:
+
+### `CrestaDB` additions (`db.py`)
+
+- `get_max_race_date() -> datetime.date | None` — returns latest race date in the DB, or `None` if empty. Used by the orchestrator to determine the extraction start date.
+- `get_ingested_pdf_sources() -> set[str]` — returns the set of `pdf_source` filenames already stored in the `races` table. Used to skip re-parsing PDFs that have already been ingested.
+
+### `pipeline.py` addition
+
+- `ingest_new_pdfs(pdf_dir: Path, db_path: Path) -> IngestStats` — compares PDFs on disk against `get_ingested_pdf_sources()`, parses only new ones, and inserts with `INSERT OR IGNORE`. This is the incremental counterpart to `ingest_all_pdfs()`.

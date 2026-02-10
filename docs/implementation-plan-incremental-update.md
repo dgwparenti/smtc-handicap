@@ -151,6 +151,7 @@ python scripts/run_update.py --after 2026/01/15
 | PDF downloaded but ingestion fails | PDF stays on disk; next run re-attempts ingestion (INSERT OR IGNORE is safe) |
 | Re-running after success | Email dedup + file dedup + INSERT OR IGNORE = no duplicate work |
 | DB corrupted | Delete `data/cresta.db`, run `--full` to rebuild from PDFs on disk |
+| Older PDFs (~2020) without split data | TimeRecords are valid without splits; split columns are nullable by design, so no special handling is needed |
 
 ## `db.py` Additions
 
