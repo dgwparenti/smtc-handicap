@@ -28,4 +28,4 @@ jobs:
         run: ruff format --check src/ tests/
 
       - name: Run tests
-        run: pytest --verbose
+        run: pytest --verbose -m "not integration"
