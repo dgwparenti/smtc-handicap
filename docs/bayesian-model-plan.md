@@ -604,7 +604,44 @@ The wide CI for the SL rider tells the committee "we're not sure — use judgmen
 
 ---
 
-## 11. Future Extensions (Post-MVP)
+## 11. Incremental Model Updates
+
+### Overview
+
+The orchestrator (`src/smtc_handicap/orchestrator.py`, see `docs/implementation-plan-incremental-update.md`) triggers model refits automatically after new data is ingested. The model module exposes a single entry point for this:
+
+### `refit_from_db(db_path, output_dir=None) -> dict`
+
+```python
+def refit_from_db(db_path: Path, output_dir: Path | None = None) -> dict:
+    """Full refit of TOP + JUNCTION models from all DB data.
+    Skips a model if < 20 observations for that start position."""
+    for position in ("TOP", "JUNCTION"):
+        stan_data = build_stan_data(db_path, start_position=position)
+        if stan_data["N"] < 20:
+            continue
+        model = compile_model()
+        fit = fit_model(model, stan_data)
+        # Save results + run diagnostics
+```
+
+### How the Orchestrator Triggers Refits
+
+1. `orchestrator.run_incremental()` calls `pipeline.ingest_new_pdfs()` and checks how many new records were inserted.
+2. If new data was ingested **and** `refit_model=True` (the default), it calls `refit_from_db(db_path)`.
+3. The refit uses **all** data in the DB (not just new data) — Stan fits the full hierarchical model from scratch. This ensures posterior estimates are globally consistent.
+4. Each refit takes ~5–10 seconds per start position. The orchestrator logs timing and diagnostic summaries.
+5. If `--no-refit` is passed via CLI, or no new data was ingested, the refit step is skipped.
+
+### Design Rationale
+
+- **Full refit, not incremental update**: Hierarchical Bayesian models do not support incremental posterior updates in a principled way. Re-running MCMC on the full dataset is the correct approach and is fast enough (<20s total) for the expected data volume (~2000–5000 observations).
+- **Minimum observation threshold**: Models are skipped if fewer than 20 observations exist for a start position, avoiding degenerate fits early in a season.
+- **Output**: Posteriors are saved to `data/model_output/` (configurable via `output_dir`). The orchestrator returns a summary dict including fit diagnostics.
+
+---
+
+## 12. Future Extensions (Post-MVP)
 
 These are not needed for the first version but are natural next steps:
 
@@ -622,7 +659,7 @@ These are not needed for the first version but are natural next steps:
 
 ---
 
-## 12. Summary for Quick Reference
+## 13. Summary for Quick Reference
 
 | Component | What it captures | Why it matters for handicapping |
 |-----------|-----------------|--------------------------------|
