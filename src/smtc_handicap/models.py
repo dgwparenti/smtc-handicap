@@ -29,9 +29,7 @@ class Rider:
     nationality: str = ""
     is_sl: bool = False  # Supplementary List
     is_am: bool = False  # Amateur
-    first_seen_date: datetime.date = field(
-        default_factory=lambda: datetime.date(2099, 1, 1)
-    )
+    first_seen_date: datetime.date = field(default_factory=lambda: datetime.date(2099, 1, 1))
 
 
 @dataclass

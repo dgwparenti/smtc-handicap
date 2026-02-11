@@ -96,7 +96,9 @@ def ingest_new_pdfs(pdf_dir: Path, db_path: Path) -> IngestStats:
 
         logger.info(
             "%d PDFs on disk, %d already ingested, %d new",
-            len(pdf_files), len(already_ingested), len(new_files),
+            len(pdf_files),
+            len(already_ingested),
+            len(new_files),
         )
 
         for i, pdf_file in enumerate(new_files, 1):

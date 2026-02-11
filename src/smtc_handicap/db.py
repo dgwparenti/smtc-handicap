@@ -183,9 +183,7 @@ class CrestaDB:
         )
 
     def race_exists(self, race_id: str) -> bool:
-        row = self.conn.execute(
-            "SELECT 1 FROM races WHERE race_id=?", (race_id,)
-        ).fetchone()
+        row = self.conn.execute("SELECT 1 FROM races WHERE race_id=?", (race_id,)).fetchone()
         return row is not None
 
     # -- TimeRecord --
@@ -250,9 +248,7 @@ class CrestaDB:
             race_id=row[1],
             rider_id=row[2],
             run_number=row[3],
-            start_time=(
-                datetime.time.fromisoformat(row[4]) if row[4] else None
-            ),
+            start_time=(datetime.time.fromisoformat(row[4]) if row[4] else None),
             split_junction=row[5],
             split_rise=row[6],
             split_stream=row[7],

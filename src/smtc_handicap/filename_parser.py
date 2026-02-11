@@ -7,8 +7,18 @@ from pathlib import Path
 
 # Day-word to number mapping
 DAY_WORDS = {
-    "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6,
-    "1": 1, "2": 2, "3": 3, "4": 4, "5": 5, "6": 6,
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "six": 6,
+    "1": 1,
+    "2": 2,
+    "3": 3,
+    "4": 4,
+    "5": 5,
+    "6": 6,
 }
 
 

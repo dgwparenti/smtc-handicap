@@ -35,9 +35,7 @@ RE_RACE_HEADER = re.compile(
     r"|SPOON|AWARD))",
     re.IGNORECASE,
 )
-RE_START_POS = re.compile(
-    r"\(\s*(Top|Junction)\s*(?:,\s*)?(?:Handicap)?\s*\)", re.IGNORECASE
-)
+RE_START_POS = re.compile(r"\(\s*(Top|Junction)\s*(?:,\s*)?(?:Handicap)?\s*\)", re.IGNORECASE)
 RE_HANDICAP_FLAG = re.compile(r"Handicap", re.IGNORECASE)
 RE_RNR = re.compile(r"\bRnR\b", re.IGNORECASE)
 RE_SL_MARKER = re.compile(r"\bSL\b")
@@ -197,10 +195,11 @@ def _is_subprize_line(line: str, lines: list[str], idx: int) -> bool:
             return True
         # If previous line is also a race-header-like line, check if we're part of a chain
         # "The Lord Trenchard Trophy" / "The Auty Speed Cup" after the main header
-        if prev.startswith("the ") or prev.startswith("for "):
+        if (prev.startswith("the ") or prev.startswith("for ")) and RE_RACE_HEADER.match(
+            lines[idx - 1].strip()
+        ):
             # This line is part of a multi-line header block
-            if RE_RACE_HEADER.match(lines[idx - 1].strip()):
-                return True
+            return True
     # Next line starts with "(for", "(Individual", or "(Fastest"
     if idx + 1 < len(lines):
         nxt = lines[idx + 1].strip().lower()
@@ -264,7 +263,6 @@ def detect_sections(lines: list[str], filename_meta: dict) -> list[Section]:
             # Look ahead for start position and handicap flag
             start_pos = ""
             is_handicap = False
-            is_day2 = False
             day_number = filename_meta.get("day_number")
 
             for j in range(i + 1, min(i + 8, len(lines))):
@@ -274,10 +272,8 @@ def detect_sections(lines: list[str], filename_meta: dict) -> list[Section]:
                     start_pos = pos_match.group(1).upper()
                     if RE_HANDICAP_FLAG.search(look_line):
                         is_handicap = True
-                if RE_SECOND_DAY.search(look_line):
-                    is_day2 = True
-                    if day_number is None:
-                        day_number = 2
+                if RE_SECOND_DAY.search(look_line) and day_number is None:
+                    day_number = 2
                 if RE_HCAP_HEADER.search(look_line):
                     is_handicap = True
 
@@ -326,8 +322,13 @@ def detect_sections(lines: list[str], filename_meta: dict) -> list[Section]:
 # ---------------------------------------------------------------------------
 
 
-def _make_race_id(name: str, start_pos: str, date: datetime.date,
-                  is_practice: bool, day_number: int | None = None) -> str:
+def _make_race_id(
+    name: str,
+    start_pos: str,
+    date: datetime.date,
+    is_practice: bool,
+    day_number: int | None = None,
+) -> str:
     if is_practice:
         return f"PRACTICE_{start_pos}_{date.isoformat()}"
     slug = re.sub(r"^THE\s+", "", name, flags=re.IGNORECASE)
@@ -386,9 +387,7 @@ def parse_practice_section(
     section: Section, race_date: datetime.date, pdf_source: str
 ) -> tuple[Race, list[Rider], list[TimeRecord]]:
     """Parse a PRACTICE section."""
-    race_id = _make_race_id(
-        "PRACTICE", section.start_position, race_date, is_practice=True
-    )
+    race_id = _make_race_id("PRACTICE", section.start_position, race_date, is_practice=True)
     race = Race(
         race_id=race_id,
         name="PRACTICE",
@@ -420,21 +419,21 @@ def parse_practice_section(
             continue
 
         name_str = " ".join(name_tokens)
-        display_name, rider_id, nationality, is_sl, is_am, _ = _extract_rider_info(
-            name_str, nat
-        )
+        display_name, rider_id, nationality, is_sl, is_am, _ = _extract_rider_info(name_str, nat)
         if not nationality:
             nationality = nat
 
         if rider_id not in seen_riders:
-            riders.append(Rider(
-                rider_id=rider_id,
-                display_name=display_name,
-                nationality=nationality,
-                is_sl=is_sl,
-                is_am=is_am,
-                first_seen_date=race_date,
-            ))
+            riders.append(
+                Rider(
+                    rider_id=rider_id,
+                    display_name=display_name,
+                    nationality=nationality,
+                    is_sl=is_sl,
+                    is_am=is_am,
+                    first_seen_date=race_date,
+                )
+            )
             seen_riders.add(rider_id)
 
         for run_idx, time_str in enumerate(time_tokens, 1):
@@ -443,16 +442,18 @@ def parse_practice_section(
                 continue
 
             record_id = f"{race_id}_{rider_id}_{run_idx}"
-            records.append(TimeRecord(
-                record_id=record_id,
-                race_id=race_id,
-                rider_id=rider_id,
-                run_number=run_idx,
-                finish_time=time_val,
-                is_fall=is_fall,
-                fall_location=fall_loc,
-                is_dnf=is_fall,
-            ))
+            records.append(
+                TimeRecord(
+                    record_id=record_id,
+                    race_id=race_id,
+                    rider_id=rider_id,
+                    run_number=run_idx,
+                    finish_time=time_val,
+                    is_fall=is_fall,
+                    fall_location=fall_loc,
+                    is_dnf=is_fall,
+                )
+            )
 
     return race, riders, records
 
@@ -470,8 +471,11 @@ def parse_race_section(
     is_day2 = section.day_number is not None and section.day_number >= 2
 
     race_id = _make_race_id(
-        section.race_name, section.start_position, race_date,
-        is_practice=False, day_number=section.day_number,
+        section.race_name,
+        section.start_position,
+        race_date,
+        is_practice=False,
+        day_number=section.day_number,
     )
     race = Race(
         race_id=race_id,
@@ -500,11 +504,24 @@ def parse_race_section(
 
     for line in section.lines[data_start:]:
         # Skip metadata lines
-        if any(kw in line for kw in [
-            "Fastest", "TOMORROW", "CRESTA", "Pilot Course", "Pilot course",
-            "Winner", "Course", "and THE", "and the", "BEGINNERS",
-            "must be present", "Over.", "Riding but not Racing",
-        ]):
+        if any(
+            kw in line
+            for kw in [
+                "Fastest",
+                "TOMORROW",
+                "CRESTA",
+                "Pilot Course",
+                "Pilot course",
+                "Winner",
+                "Course",
+                "and THE",
+                "and the",
+                "BEGINNERS",
+                "must be present",
+                "Over.",
+                "Riding but not Racing",
+            ]
+        ):
             continue
         if RE_START_POS.search(line) or RE_SECOND_DAY.search(line):
             continue
@@ -521,7 +538,8 @@ def parse_race_section(
         remaining = tokens[idx:]
 
         # Find the boundary between name and numeric data
-        # Walk tokens: name parts, then nationality (2-3 uppercase), then Scr/RnR/handicap, then times
+        # Walk tokens: name parts, then nationality (2-3 uppercase),
+        # then Scr/RnR/handicap, then times
         name_tokens: list[str] = []
         nat = ""
         data_tokens: list[str] = []
@@ -537,7 +555,7 @@ def parse_race_section(
             if RE_RNR.match(tok):
                 is_rnr = True
                 # Next tokens are times
-                data_tokens = remaining[ti + 1:]
+                data_tokens = remaining[ti + 1 :]
                 break
             # Check for nationality — must have at least 1 name token before it
             if name_tokens and RE_NATIONALITY.match(tok) and tok.upper() != "SCR":
@@ -545,8 +563,11 @@ def parse_race_section(
                 next_idx = ti + 1
                 if next_idx < len(remaining):
                     nxt = remaining[next_idx]
-                    if (_is_time_or_fall(nxt) or nxt.upper() in ("SCR", "SCRATCH")
-                            or RE_RNR.match(nxt)):
+                    if (
+                        _is_time_or_fall(nxt)
+                        or nxt.upper() in ("SCR", "SCRATCH")
+                        or RE_RNR.match(nxt)
+                    ):
                         nat = tok
                         data_tokens = remaining[next_idx:]
                         break
@@ -606,14 +627,16 @@ def parse_race_section(
         actual_times = _strip_trailing_totals(all_times, is_handicap)
 
         if rider_id not in seen_riders:
-            riders.append(Rider(
-                rider_id=rider_id,
-                display_name=display_name,
-                nationality=nationality,
-                is_sl=is_sl,
-                is_am=is_am,
-                first_seen_date=race_date,
-            ))
+            riders.append(
+                Rider(
+                    rider_id=rider_id,
+                    display_name=display_name,
+                    nationality=nationality,
+                    is_sl=is_sl,
+                    is_am=is_am,
+                    first_seen_date=race_date,
+                )
+            )
             seen_riders.add(rider_id)
 
         run_number_start = 4 if is_day2 else 1
@@ -624,17 +647,19 @@ def parse_race_section(
 
             run_num = run_number_start + run_idx
             record_id = f"{race_id}_{rider_id}_{run_num}"
-            records.append(TimeRecord(
-                record_id=record_id,
-                race_id=race_id,
-                rider_id=rider_id,
-                run_number=run_num,
-                finish_time=time_val,
-                handicap=handicap_val,
-                is_fall=is_fall,
-                fall_location=fall_loc,
-                is_dnf=is_fall,
-            ))
+            records.append(
+                TimeRecord(
+                    record_id=record_id,
+                    race_id=race_id,
+                    rider_id=rider_id,
+                    run_number=run_num,
+                    finish_time=time_val,
+                    handicap=handicap_val,
+                    is_fall=is_fall,
+                    fall_location=fall_loc,
+                    is_dnf=is_fall,
+                )
+            )
 
     return race, riders, records
 
@@ -736,15 +761,6 @@ def parse_split_section(
         speed = _parse_split_val(split_vals, 5)
 
         # Check for fall in split values
-        is_fall = False
-        fall_loc = None
-        for sv in split_vals:
-            fall_match = RE_FALL.match(sv)
-            if fall_match:
-                is_fall = True
-                fall_loc = fall_match.group(1).upper()
-                break
-
         # Match to existing records for this rider
         rider_records = by_rider.get(rider_id, [])
         if not rider_records:
@@ -754,11 +770,14 @@ def parse_split_section(
         # Try to match by finish time
         matched = False
         for rec in rider_records:
-            if rec.finish_time is not None and finish is not None:
-                if abs(rec.finish_time - finish) < 0.05:
-                    _merge_splits(rec, start_time_obj, junction, rise, stream, bulpetts, speed)
-                    matched = True
-                    break
+            if (
+                rec.finish_time is not None
+                and finish is not None
+                and abs(rec.finish_time - finish) < 0.05
+            ):
+                _merge_splits(rec, start_time_obj, junction, rise, stream, bulpetts, speed)
+                matched = True
+                break
 
         if not matched:
             # Match by sequential order - find next unmerged record
@@ -867,8 +886,7 @@ def parse_pdf(filepath: Path) -> ParsedPDF:
 
         except Exception as e:
             result.warnings.append(
-                f"Error parsing section {section.section_type} "
-                f"({section.header_line}): {e}"
+                f"Error parsing section {section.section_type} ({section.header_line}): {e}"
             )
 
     # Deduplicate riders by rider_id
@@ -880,8 +898,11 @@ def parse_pdf(filepath: Path) -> ParsedPDF:
 
     logger.info(
         "Parsed %s: %d races, %d riders, %d time_records, %d warnings",
-        filename, len(result.races), len(result.riders),
-        len(result.time_records), len(result.warnings),
+        filename,
+        len(result.races),
+        len(result.riders),
+        len(result.time_records),
+        len(result.warnings),
     )
 
     return result

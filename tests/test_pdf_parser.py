@@ -2,8 +2,6 @@
 
 import datetime
 
-import pytest
-
 from smtc_handicap.pdf_parser import (
     Section,
     _make_race_id,
@@ -73,15 +71,16 @@ class TestMakeRaceId:
         assert rid == "PRACTICE_TOP_2026-01-21"
 
     def test_named_race(self):
-        rid = _make_race_id(
-            "THE STAGNI CUP", "TOP", datetime.date(2026, 1, 21), is_practice=False
-        )
+        rid = _make_race_id("THE STAGNI CUP", "TOP", datetime.date(2026, 1, 21), is_practice=False)
         assert rid == "STAGNI_CUP_2026-01-21"
 
     def test_multi_day(self):
         rid = _make_race_id(
-            "THE BRABAZON TROPHY", "TOP", datetime.date(2026, 2, 8),
-            is_practice=False, day_number=2,
+            "THE BRABAZON TROPHY",
+            "TOP",
+            datetime.date(2026, 2, 8),
+            is_practice=False,
+            day_number=2,
         )
         assert rid == "BRABAZON_TROPHY_DAY2_2026-02-08"
 
@@ -175,9 +174,7 @@ class TestParseRaceSection:
                 "2    C.D. Jones    CH    3.00    54.00    55.00    56.00    165.00    156.00",
             ],
         )
-        race, riders, records = parse_race_section(
-            section, datetime.date(2026, 1, 25), "test.pdf"
-        )
+        race, riders, records = parse_race_section(section, datetime.date(2026, 1, 25), "test.pdf")
         assert race.is_handicap_race is True
         assert len(riders) == 2
         assert len(records) == 6  # 3 runs each

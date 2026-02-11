@@ -87,12 +87,14 @@ class TestRiderCRUD:
 
     def test_upsert_keeps_earlier_date(self, db):
         r1 = Rider(
-            rider_id="test", display_name="T",
+            rider_id="test",
+            display_name="T",
             first_seen_date=datetime.date(2026, 1, 15),
         )
         db.upsert_rider(r1)
         r2 = Rider(
-            rider_id="test", display_name="T",
+            rider_id="test",
+            display_name="T",
             first_seen_date=datetime.date(2026, 1, 8),
         )
         db.upsert_rider(r2)
