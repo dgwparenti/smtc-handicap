@@ -125,9 +125,8 @@ All rider dropdowns show `display_name` (e.g. "F.P. Rueda (Jnr)") and use `rider
 
 | Element | Visual | Description |
 |---------|--------|-------------|
-| Histogram | Light blue bars, low opacity | Raw finish time distribution (all time) |
-| KDE (all-time) | Solid blue line, filled area | Smoothed density of all valid finish times |
-| KDE (season) | Dashed blue line | Smoothed density of current season finish times only |
+| KDE (all-time) | Solid blue filled bell curve | Smooth density curve showing concentration of all valid finish times |
+| KDE (season) | Dashed blue bell curve | Smooth density curve for current season finish times only |
 | Best-ever line | Solid green vertical line | Minimum finish time across all data |
 | Season-best line | Dashed red vertical line | Minimum finish time in selected season |
 
@@ -334,6 +333,8 @@ Queries are implemented directly in `queries.py` via `db.conn.execute()` (follow
 
 ### KDE Computation
 
+All distributions are rendered as **smooth filled KDE curves** (bell-shaped) to clearly show where the concentration of data is. No bar histograms are used.
+
 - Library: `scipy.stats.gaussian_kde` with Silverman bandwidth
 - Grid: 200 points, extending 3s beyond data min/max
 - Minimum data requirement: 2 points for KDE; below that, show individual times as markers
@@ -342,7 +343,7 @@ Queries are implemented directly in `queries.py` via `db.conn.execute()` (follow
 
 | Function | Section | Returns |
 |----------|---------|---------|
-| `plot_rider_distribution(summary)` | 1 | KDE + histogram + best-ever/season-best lines |
+| `plot_rider_distribution(summary)` | 1 | KDE density curve (bell-shaped) + best-ever/season-best lines |
 | `plot_rider_vs_field(rider_summary, field_summary)` | 2 | Field KDE (light) + rider KDE (dark overlay) |
 | `plot_handicap_comparison(rider_summary, scratch_summary, handicap)` | 3 | Two KDEs + median lines + handicap annotation |
 
@@ -432,7 +433,7 @@ streamlit run src/smtc_handicap/ui/app.py
 Checklist:
 - [ ] Rider dropdown populated with display names
 - [ ] Season dropdown shows available seasons
-- [ ] Section 1: TOP/JUNCTION plots render with KDE, histogram, vertical lines
+- [ ] Section 1: TOP/JUNCTION plots render with smooth KDE density curves and vertical lines
 - [ ] Section 1: Best-ever (green) and season-best (red) lines visible
 - [ ] Section 2: Field distribution (light) with rider overlay (dark)
 - [ ] Section 3: Two independent rider selectors work correctly
