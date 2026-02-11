@@ -71,6 +71,7 @@ def build_stan_data(db_path: str | Path, start_position: str, *, min_runs: int =
         "prior_sigma_mu_pop": 10.0,
         "prior_sigma_season_sd": prior_sigma_season_sd,
         # Metadata (not passed to Stan, used by Python callers)
+        "meta_start_position": start_position,
         "meta_rider_map": rider_map,
         "meta_race_type_map": race_type_map,
         "meta_df": df,

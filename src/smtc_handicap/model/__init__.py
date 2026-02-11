@@ -5,7 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from smtc_handicap.model.data_prep import build_stan_data
-from smtc_handicap.model.diagnostics import check_diagnostics
+from smtc_handicap.model.diagnostics import check_diagnostics, save_inference_data
 from smtc_handicap.model.fit import compile_model, fit_model
 from smtc_handicap.model.predict import calculate_handicaps
 
@@ -17,6 +17,7 @@ def run_model(
     chains: int = 4,
     iter_warmup: int = 1000,
     iter_sampling: int = 2000,
+    output_dir: str | Path | None = None,
 ) -> dict:
     """Full pipeline: data prep -> compile -> fit -> diagnostics.
 
@@ -25,6 +26,8 @@ def run_model(
     db_path : path to the SQLite database
     start_position : "TOP" or "JUNCTION"
     chains, iter_warmup, iter_sampling : MCMC settings
+    output_dir : if provided, save InferenceData as NetCDF to this directory
+        (e.g. ``data/model_fits/``). File is named ``{start_position.lower()}.nc``.
 
     Returns
     -------
@@ -50,7 +53,11 @@ def run_model(
         iter_warmup=iter_warmup,
         iter_sampling=iter_sampling,
     )
-    diag = check_diagnostics(fit)
+    diag = check_diagnostics(fit, stan_data)
+
+    if output_dir is not None:
+        nc_path = Path(output_dir) / f"{start_position.lower()}.nc"
+        save_inference_data(diag["idata"], nc_path)
 
     return {
         "fit": fit,
@@ -67,4 +74,5 @@ __all__ = [
     "compile_model",
     "fit_model",
     "run_model",
+    "save_inference_data",
 ]
