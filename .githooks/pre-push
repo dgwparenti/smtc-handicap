@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Activate venv if present (ruff is installed there)
+REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+if [ -f "$REPO_DIR/.venv/bin/activate" ]; then
+    source "$REPO_DIR/.venv/bin/activate"
+fi
+
 echo "Running pre-push checks..."
 
 echo "  ruff check..."
