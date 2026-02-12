@@ -16,6 +16,10 @@ dependencies = [
     "lxml",
     "fpdf2",
     "pdfplumber",
+    "cmdstanpy>=1.2",
+    "numpy",
+    "pandas",
+    "arviz",
 ]
 
 [project.optional-dependencies]
