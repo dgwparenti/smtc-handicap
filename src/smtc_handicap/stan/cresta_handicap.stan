@@ -1,11 +1,15 @@
 // =============================================================================
-// Cresta Run Handicap Model
+// Cresta Run Handicap Model (Multi-Season)
 // Hierarchical Bayesian model for predicting rider finish times.
 //
 // Separate models are fitted for TOP and JUNCTION start positions.
 // Uses a single shared observation noise sigma_obs rather than per-rider
 // sigma_rider to keep the parameter space tractable with sparse data.
 // Per-rider consistency is computed post-hoc from residuals.
+//
+// Season effects: global eta[S] + per-rider linear trend beta_trend[J].
+// This replaces the dense delta[S,J] matrix with a parsimonious design
+// that scales to many seasons without exploding parameter count.
 // =============================================================================
 
 data {
@@ -22,35 +26,41 @@ data {
 
   // SL rider data
   array[J] int<lower=0, upper=1> is_sl;  // 1 if rider is SL, 0 otherwise
-  vector[N] run_seq;                      // Sequential run number within season for this rider
-                                          // (1, 2, 3, ... counting from season start)
+  vector[N] run_seq;                      // Per-season sequential run number for this rider
+
+  // Season trend data
+  vector[S] season_num;              // Centered season numbers for trend term
 
   // Prior configuration (passed from Python so TOP/JUNCTION can differ)
   real prior_mu_pop;            // Prior mean for population mean (57 for TOP, 48 for JUNCTION)
   real prior_sigma_mu_pop;      // Prior sd for population mean (10)
-  real<lower=0> prior_sigma_season_sd;  // Prior sd for sigma_season (2 normally, 0.01 when S=1)
 }
 
 parameters {
   // --- Population level ---
   real mu_pop;                              // Population mean finish time
-  real<lower=0, upper=20> sigma_pop;        // Between-rider spread in ability
+  real<lower=0> sigma_pop;                  // Between-rider spread in ability
 
   // --- Rider level (non-centered parameterization for efficiency) ---
   vector[J] alpha_raw;                      // Standardized rider abilities
 
   // --- Shared observation noise ---
-  real<lower=0, upper=15> sigma_obs;        // Shared run-to-run variability
+  real<lower=0> sigma_obs;                  // Shared run-to-run variability
 
-  // --- Season form ---
-  real<lower=0, upper=10> sigma_season;     // How much riders vary season to season
-  matrix[S, J] delta_raw;                   // Standardized season x rider deviations
+  // --- Season effects (global, non-centered) ---
+  real<lower=0> sigma_season;               // How much seasons vary (ice/weather)
+  vector[S] eta_raw;                        // Standardized season effects
 
-  // --- Race-type effect ---
-  real<lower=0, upper=10> sigma_race;       // How much race types vary
+  // --- Per-rider trend over seasons (non-centered) ---
+  real beta_trend_mu;                       // Population mean trend (improvement/decline)
+  real<lower=0> sigma_trend;                // Between-rider trend spread
+  vector[J] beta_trend_raw;                 // Standardized per-rider trends
+
+  // --- Race-type effect (non-centered) ---
+  real<lower=0> sigma_race;                 // How much race types vary
   vector[R] gamma_raw;                      // Standardized race-type effects
 
-  // --- SL improvement ---
+  // --- SL within-season improvement ---
   real beta_improve;                        // Mean improvement rate (seconds per run, expect < 0)
 }
 
@@ -58,11 +68,11 @@ transformed parameters {
   // Rider baseline abilities (non-centered -> centered)
   vector[J] alpha = mu_pop + sigma_pop * alpha_raw;
 
-  // Season x rider form deviations
-  matrix[S, J] delta;
-  for (s in 1:S)
-    for (j in 1:J)
-      delta[s, j] = sigma_season * delta_raw[s, j];
+  // Global season effects
+  vector[S] eta = sigma_season * eta_raw;
+
+  // Per-rider linear trends
+  vector[J] beta_trend = beta_trend_mu + sigma_trend * beta_trend_raw;
 
   // Race-type effects
   vector[R] gamma = sigma_race * gamma_raw;
@@ -71,7 +81,8 @@ transformed parameters {
   vector[N] mu;
   for (n in 1:N) {
     mu[n] = alpha[rider[n]]
-            + delta[season[n], rider[n]]
+            + eta[season[n]]
+            + beta_trend[rider[n]] * season_num[season[n]]
             + gamma[race_type[n]];
 
     // SL improvement trend (only active for SL riders)
@@ -85,23 +96,30 @@ model {
   // --- Hyperpriors ---
   mu_pop ~ normal(prior_mu_pop, prior_sigma_mu_pop);
   sigma_pop ~ normal(0, 5);       // half-normal via constraint
-  sigma_season ~ normal(0, prior_sigma_season_sd);
-  sigma_race ~ normal(0, 1.5);
+  sigma_season ~ normal(0, 3);
+  sigma_race ~ normal(0, 2);
+  sigma_trend ~ normal(0, 1);
 
   // --- Observation noise ---
-  sigma_obs ~ normal(0, 3);       // half-normal via constraint
+  sigma_obs ~ normal(0, 5);       // half-normal via constraint
+
+  // --- Trend population mean ---
+  beta_trend_mu ~ normal(0, 1);   // expect ~0 mean population trend
 
   // --- Rider level ---
   alpha_raw ~ std_normal();        // implies alpha ~ N(mu_pop, sigma_pop)
 
-  // --- Season form ---
-  to_vector(delta_raw) ~ std_normal();  // implies delta ~ N(0, sigma_season)
+  // --- Season effects ---
+  eta_raw ~ std_normal();          // implies eta ~ N(0, sigma_season)
+
+  // --- Per-rider trends ---
+  beta_trend_raw ~ std_normal();   // implies beta_trend ~ N(beta_trend_mu, sigma_trend)
 
   // --- Race-type effects ---
   gamma_raw ~ std_normal();        // implies gamma ~ N(0, sigma_race)
 
   // --- SL improvement ---
-  beta_improve ~ normal(-0.3, 0.2);
+  beta_improve ~ normal(-0.3, 0.3);
 
   // --- Likelihood ---
   y ~ normal(mu, sigma_obs);

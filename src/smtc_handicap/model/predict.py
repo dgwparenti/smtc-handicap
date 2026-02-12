@@ -12,7 +12,10 @@ def get_posterior_samples(fit: CmdStanMCMC) -> dict[str, np.ndarray]:
 
     Returns dict with arrays shaped (num_draws, ...):
       - alpha: (D, J)
-      - delta: (D, S, J)
+      - eta: (D, S)
+      - beta_trend: (D, J)
+      - beta_trend_mu: (D,)
+      - sigma_trend: (D,)
       - gamma: (D, R)
       - beta_improve: (D,)
       - sigma_obs: (D,)
@@ -25,6 +28,18 @@ def get_posterior_samples(fit: CmdStanMCMC) -> dict[str, np.ndarray]:
     )
     alpha = draws[alpha_cols].values  # (D, J)
 
+    eta_cols = sorted(
+        [c for c in draws.columns if c.startswith("eta[")],
+        key=lambda c: int(c.split("[")[1].rstrip("]")),
+    )
+    eta = draws[eta_cols].values  # (D, S)
+
+    beta_trend_cols = sorted(
+        [c for c in draws.columns if c.startswith("beta_trend[")],
+        key=lambda c: int(c.split("[")[1].rstrip("]")),
+    )
+    beta_trend = draws[beta_trend_cols].values  # (D, J)
+
     gamma_cols = sorted(
         [c for c in draws.columns if c.startswith("gamma[")],
         key=lambda c: int(c.split("[")[1].rstrip("]")),
@@ -33,20 +48,15 @@ def get_posterior_samples(fit: CmdStanMCMC) -> dict[str, np.ndarray]:
 
     sigma_obs = draws["sigma_obs"].values  # (D,)
     beta_improve = draws["beta_improve"].values  # (D,)
-
-    # delta has shape (D, S, J) — column names like delta[1,1], delta[1,2], ...
-    delta_cols = sorted(
-        [c for c in draws.columns if c.startswith("delta[")],
-        key=lambda c: [int(x) for x in c.split("[")[1].rstrip("]").split(",")],
-    )
-    delta_flat = draws[delta_cols].values  # (D, S*J)
-    n_seasons = max(int(c.split("[")[1].split(",")[0]) for c in delta_cols)
-    n_riders = alpha.shape[1]
-    delta = delta_flat.reshape(delta_flat.shape[0], n_seasons, n_riders)  # (D, S, J)
+    beta_trend_mu = draws["beta_trend_mu"].values  # (D,)
+    sigma_trend = draws["sigma_trend"].values  # (D,)
 
     return {
         "alpha": alpha,
-        "delta": delta,
+        "eta": eta,
+        "beta_trend": beta_trend,
+        "beta_trend_mu": beta_trend_mu,
+        "sigma_trend": sigma_trend,
         "gamma": gamma,
         "beta_improve": beta_improve,
         "sigma_obs": sigma_obs,
@@ -57,10 +67,12 @@ def _compute_rider_consistency(stan_data: dict, posterior: dict) -> dict[str, fl
     """Compute per-rider residual SD post-hoc from posterior mean predictions."""
     df = stan_data["meta_df"]
     rider_map = stan_data["meta_rider_map"]
+    season_num = stan_data["season_num"]
 
     # Use posterior means for prediction
     alpha_mean = posterior["alpha"].mean(axis=0)
-    delta_mean = posterior["delta"].mean(axis=0)
+    eta_mean = posterior["eta"].mean(axis=0)
+    beta_trend_mean = posterior["beta_trend"].mean(axis=0)
     gamma_mean = posterior["gamma"].mean(axis=0)
     beta_mean = float(posterior["beta_improve"].mean())
 
@@ -70,7 +82,7 @@ def _compute_rider_consistency(stan_data: dict, posterior: dict) -> dict[str, fl
         j = rider_map[rid] - 1
         s = int(row["season_idx"]) - 1
         r = int(row["race_type_idx"]) - 1
-        pred = alpha_mean[j] + delta_mean[s, j] + gamma_mean[r]
+        pred = alpha_mean[j] + eta_mean[s] + beta_trend_mean[j] * season_num[s] + gamma_mean[r]
         if stan_data["is_sl"][j]:
             pred += beta_mean * row["run_seq"]
         residual = row["finish_time"] - pred
@@ -111,6 +123,7 @@ def calculate_handicaps(
     """
     rider_map = stan_data["meta_rider_map"]
     df = stan_data["meta_df"]
+    season_num = stan_data["season_num"]
 
     posterior = get_posterior_samples(fit)
     num_draws = posterior["alpha"].shape[0]
@@ -142,13 +155,17 @@ def calculate_handicaps(
     n_field = len(riders_info)
     pred_times = np.zeros((num_draws, n_field))
 
+    s = season_idx - 1  # 0-based for numpy
+    r = race_type_idx - 1  # 0-based for numpy
+
     for i, info in enumerate(riders_info):
         j = info["idx"]
-        s = season_idx - 1  # 0-based for numpy
-        r = race_type_idx - 1  # 0-based for numpy
 
         pred_times[:, i] = (
-            posterior["alpha"][:, j] + posterior["delta"][:, s, j] + posterior["gamma"][:, r]
+            posterior["alpha"][:, j]
+            + posterior["eta"][:, s]
+            + posterior["beta_trend"][:, j] * season_num[s]
+            + posterior["gamma"][:, r]
         )
         if info["is_sl"]:
             next_run = info["max_run_seq"] + 1

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from pathlib import Path
 
@@ -40,10 +41,11 @@ def build_stan_data(db_path: str | Path, start_position: str, *, min_runs: int =
 
     rider_map = _build_index_map(df["rider_id"].unique())
     race_type_map = _build_race_type_map(df)
+    season_map, season_num = _build_season_data(df)
 
     df["rider_idx"] = df["rider_id"].map(rider_map)
     df["race_type_idx"] = df["race_type_label"].map(race_type_map)
-    df["season_idx"] = 1  # single season for now
+    df["season_idx"] = df["season"].map(season_map)
 
     df = _compute_run_seq(df)
 
@@ -51,15 +53,11 @@ def build_stan_data(db_path: str | Path, start_position: str, *, min_runs: int =
     is_sl = _build_is_sl_array(df, rider_map, num_riders)
 
     prior_mu = 57.0 if start_position == "TOP" else 48.0
-    num_seasons = 1  # single season for now
-    # With S=1, delta and alpha are confounded — use a tight prior to
-    # effectively disable the season component until more seasons exist.
-    prior_sigma_season_sd = 0.01 if num_seasons == 1 else 2.0
 
     stan_data = {
         "N": len(df),
         "J": num_riders,
-        "S": num_seasons,
+        "S": len(season_map),
         "R": len(race_type_map),
         "rider": df["rider_idx"].values.astype(int),
         "season": df["season_idx"].values.astype(int),
@@ -67,20 +65,21 @@ def build_stan_data(db_path: str | Path, start_position: str, *, min_runs: int =
         "y": df["finish_time"].values.astype(float),
         "is_sl": is_sl,
         "run_seq": df["run_seq"].values.astype(float),
+        "season_num": season_num,
         "prior_mu_pop": prior_mu,
         "prior_sigma_mu_pop": 10.0,
-        "prior_sigma_season_sd": prior_sigma_season_sd,
         # Metadata (not passed to Stan, used by Python callers)
         "meta_start_position": start_position,
         "meta_rider_map": rider_map,
         "meta_race_type_map": race_type_map,
+        "meta_season_map": season_map,
         "meta_df": df,
     }
     return stan_data
 
 
 def _query_valid_times(conn: sqlite3.Connection, start_position: str) -> pd.DataFrame:
-    """Fetch non-fall, non-DNF records with a valid finish_time."""
+    """Fetch non-fall records with a valid finish_time (includes RnR riders)."""
     query = """
         SELECT
             tr.record_id,
@@ -99,16 +98,54 @@ def _query_valid_times(conn: sqlite3.Connection, start_position: str) -> pd.Data
         JOIN riders rd ON tr.rider_id = rd.rider_id
         WHERE r.start_position = ?
           AND tr.is_fall = 0
-          AND tr.is_dnf  = 0
           AND tr.finish_time IS NOT NULL
         ORDER BY r.date, tr.rider_id, tr.record_id
     """
     df = pd.read_sql_query(query, conn, params=(start_position,))
-    # Derive race-type label: PRACTICE or the named race
+    # Derive race-type label: PRACTICE or the named race (strip leading "THE ")
     df["race_type_label"] = df.apply(
-        lambda row: "PRACTICE" if row["is_practice"] else row["race_name"], axis=1
+        lambda row: "PRACTICE" if row["is_practice"] else _normalize_race_name(row["race_name"]),
+        axis=1,
     )
+    # Compute season from race_date (Nov-Mar → that winter's year)
+    df["season"] = df["race_date"].apply(_date_to_season)
     return df
+
+
+def _normalize_race_name(name: str) -> str:
+    """Strip leading 'THE ' from race names for consistent race-type grouping."""
+    return re.sub(r"^THE\s+", "", name)
+
+
+def _date_to_season(date_str: str) -> int:
+    """Map a race date to its Cresta season year.
+
+    The season runs Nov-Mar. Months Nov/Dec belong to the following year's season;
+    months Jan-Oct belong to that same year's season.
+    E.g. Dec 2019 → 2020, Jan 2026 → 2026, Nov 2025 → 2026.
+    """
+    parts = date_str.split("-")
+    year = int(parts[0])
+    month = int(parts[1])
+    if month >= 11:
+        return year + 1
+    return year
+
+
+def _build_season_data(df: pd.DataFrame) -> tuple[dict[int, int], np.ndarray]:
+    """Build season index map and centered season_num array.
+
+    Returns
+    -------
+    season_map : dict mapping season year → 1-based contiguous index
+    season_num : float array of length S with centered season numbers
+    """
+    seasons_sorted = sorted(df["season"].unique())
+    season_map = {s: i + 1 for i, s in enumerate(seasons_sorted)}
+    season_years = np.array(seasons_sorted, dtype=float)
+    mean_year = season_years.mean()
+    season_num = season_years - mean_year
+    return season_map, season_num
 
 
 def _filter_min_runs(df: pd.DataFrame, min_runs: int) -> pd.DataFrame:
@@ -121,10 +158,10 @@ def _filter_min_runs(df: pd.DataFrame, min_runs: int) -> pd.DataFrame:
 
 
 def _filter_outliers(df: pd.DataFrame, start_position: str) -> pd.DataFrame:
-    """Remove times > 3x the median for this start position."""
+    """Remove times > 3x the median or < 10s for this start position."""
     median_time = df["finish_time"].median()
     cutoff = 3.0 * median_time
-    return df[df["finish_time"] <= cutoff].reset_index(drop=True)
+    return df[(df["finish_time"] >= 10.0) & (df["finish_time"] <= cutoff)].reset_index(drop=True)
 
 
 def _build_index_map(unique_ids: np.ndarray) -> dict[str, int]:
@@ -144,9 +181,9 @@ def _build_race_type_map(df: pd.DataFrame) -> dict[str, int]:
 
 
 def _compute_run_seq(df: pd.DataFrame) -> pd.DataFrame:
-    """Add a per-rider sequential run number, ordered by date."""
-    df = df.sort_values(["rider_id", "race_date", "record_id"]).copy()
-    df["run_seq"] = df.groupby("rider_id").cumcount() + 1
+    """Add a per-rider, per-season sequential run number, ordered by date."""
+    df = df.sort_values(["rider_id", "season", "race_date", "record_id"]).copy()
+    df["run_seq"] = df.groupby(["rider_id", "season"]).cumcount() + 1
     # Restore original order
     df = df.sort_values(["race_date", "rider_id", "record_id"]).reset_index(drop=True)
     return df
