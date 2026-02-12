@@ -66,12 +66,14 @@ def scrape_season_events(season_slug: str) -> list[dict]:
         if not link_el or not link_el.get("href"):
             continue
 
-        events.append({
-            "title": title_el.get_text(strip=True) if title_el else "",
-            "date": date_el.get_text(strip=True) if date_el else "",
-            "category": category,
-            "url": link_el["href"],
-        })
+        events.append(
+            {
+                "title": title_el.get_text(strip=True) if title_el else "",
+                "date": date_el.get_text(strip=True) if date_el else "",
+                "category": category,
+                "url": link_el["href"],
+            }
+        )
 
     events.sort(key=lambda e: e["date"])
     logger.info("Found %d race/practice events for season %s", len(events), season_slug)
@@ -142,11 +144,13 @@ def scrape_event_pdf_urls(
                 and "w-condition-invisible" not in classes
                 and "draw" not in label
             ):
-                pdfs.append({
-                    "url": href,
-                    "label": el.get_text(strip=True),
-                    "source_page": full_url,
-                })
+                pdfs.append(
+                    {
+                        "url": href,
+                        "label": el.get_text(strip=True),
+                        "source_page": full_url,
+                    }
+                )
 
     # Check for child events (sub-events like Practice (T), Practice (J))
     for child in soup.select(".child-event .child-event--slug"):

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import html
 import json
-from pathlib import Path
 
 from smtc_handicap.json_extractor import extract_race_data, has_ride_data, save_race_json
 

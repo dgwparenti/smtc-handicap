@@ -69,12 +69,14 @@ def _build_practice_rows(race_data: dict) -> list[list[str]]:
         time_val = _format_time(r.get("T_Total"))
         if fall:
             time_val = fall
-        rows.append([
-            _rider_display_name(r),
-            r.get("CourseStart", ""),
-            time_val,
-            _format_time(r.get("Speed")),
-        ])
+        rows.append(
+            [
+                _rider_display_name(r),
+                r.get("CourseStart", ""),
+                time_val,
+                _format_time(r.get("Speed")),
+            ]
+        )
     return rows
 
 
@@ -88,13 +90,15 @@ def _build_race_rows(race_data: dict) -> tuple[list[str], list[list[str]]]:
         header = ["Pos", "Name", "H'Cap", "Time", "Total"]
         rows = []
         for s in standings:
-            rows.append([
-                str(s.get("Position", "")),
-                s.get("NamePrint") or s.get("NameSort") or "Unknown",
-                _format_time(s.get("T_HCP")),
-                _format_time(s.get("T_Total")),
-                _format_time(s.get("T_Net")),
-            ])
+            rows.append(
+                [
+                    str(s.get("Position", "")),
+                    s.get("NamePrint") or s.get("NameSort") or "Unknown",
+                    _format_time(s.get("T_HCP")),
+                    _format_time(s.get("T_Total")),
+                    _format_time(s.get("T_Net")),
+                ]
+            )
         return header, rows
 
     # Fallback to Rides
@@ -105,14 +109,16 @@ def _build_race_rows(race_data: dict) -> tuple[list[str], list[list[str]]]:
     header = ["Pos", "Name", "H'Cap", "Time", "Speed", "Falls"]
     rows = []
     for r in rides:
-        rows.append([
-            str(r.get("Position", "")),
-            _rider_display_name(r),
-            _format_time(r.get("T_HCP")),
-            _format_time(r.get("T_Total")),
-            _format_time(r.get("Speed")),
-            _fall_text(r),
-        ])
+        rows.append(
+            [
+                str(r.get("Position", "")),
+                _rider_display_name(r),
+                _format_time(r.get("T_HCP")),
+                _format_time(r.get("T_Total")),
+                _format_time(r.get("Speed")),
+                _fall_text(r),
+            ]
+        )
     return header, rows
 
 
@@ -154,10 +160,7 @@ def generate_results_pdf(race_data: dict, output_path: Path) -> Path | None:
         rows = _build_practice_rows(race_data)
     else:
         header, rows = _build_race_rows(race_data)
-        if len(header) == 5:
-            col_widths = [15, 70, 25, 30, 30]
-        else:
-            col_widths = [15, 60, 25, 30, 20, 40]
+        col_widths = [15, 70, 25, 30, 30] if len(header) == 5 else [15, 60, 25, 30, 20, 40]
 
     # Table header
     pdf.set_font("Helvetica", "B", 9)

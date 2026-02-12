@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import html as html_mod
 import json
-from pathlib import Path
 from unittest.mock import patch
 
 import responses
@@ -399,17 +398,18 @@ class TestScrapeAndDownload:
     @responses.activate
     @patch("smtc_handicap.web_scraper.RATE_LIMIT_SECONDS", 0)
     def test_idempotent_rerun(self, tmp_path):
-        pdf_content = b"%PDF-1.4 test content"
-        cdn_url = "https://cdn.prod.website-files.com/abc/def_20250104_rj_Heaton.pdf"
-
         # Pre-populate log with already-processed event
         log_file = tmp_path / "log.json"
-        log_file.write_text(json.dumps([
-            {
-                "event_url": "/events-races/heaton-2025-01-04",
-                "status": "success",
-            }
-        ]))
+        log_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "event_url": "/events-races/heaton-2025-01-04",
+                        "status": "success",
+                    }
+                ]
+            )
+        )
 
         responses.add(
             responses.GET,
@@ -512,12 +512,16 @@ class TestScrapeAndDownload:
     def test_idempotent_with_json_extracted(self, tmp_path):
         """Events with json_extracted status should be skipped on rerun."""
         log_file = tmp_path / "log.json"
-        log_file.write_text(json.dumps([
-            {
-                "event_url": "/events-races/practice-2022-3687-12-24",
-                "status": "json_extracted",
-            }
-        ]))
+        log_file.write_text(
+            json.dumps(
+                [
+                    {
+                        "event_url": "/events-races/practice-2022-3687-12-24",
+                        "status": "json_extracted",
+                    }
+                ]
+            )
+        )
 
         responses.add(
             responses.GET,
