@@ -4,7 +4,7 @@ import datetime
 
 from smtc_handicap.pdf_parser import (
     Section,
-    _make_race_id,
+    make_race_id,
     detect_sections,
     parse_practice_section,
     parse_race_section,
@@ -67,15 +67,15 @@ class TestSplitRow:
 
 class TestMakeRaceId:
     def test_practice(self):
-        rid = _make_race_id("PRACTICE", "TOP", datetime.date(2026, 1, 21), is_practice=True)
+        rid = make_race_id("PRACTICE", "TOP", datetime.date(2026, 1, 21), is_practice=True)
         assert rid == "PRACTICE_TOP_2026-01-21"
 
     def test_named_race(self):
-        rid = _make_race_id("THE STAGNI CUP", "TOP", datetime.date(2026, 1, 21), is_practice=False)
+        rid = make_race_id("THE STAGNI CUP", "TOP", datetime.date(2026, 1, 21), is_practice=False)
         assert rid == "STAGNI_CUP_2026-01-21"
 
     def test_multi_day(self):
-        rid = _make_race_id(
+        rid = make_race_id(
             "THE BRABAZON TROPHY",
             "TOP",
             datetime.date(2026, 2, 8),
