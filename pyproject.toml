@@ -15,6 +15,7 @@ dependencies = [
     "beautifulsoup4",
     "lxml",
     "fpdf2",
+    "pdfplumber",
 ]
 
 [project.optional-dependencies]
