@@ -4,8 +4,8 @@ import datetime
 
 from smtc_handicap.pdf_parser import (
     Section,
-    make_race_id,
     detect_sections,
+    make_race_id,
     parse_practice_section,
     parse_race_section,
     parse_time_cell,

@@ -98,9 +98,10 @@ class TestParseFallDescription:
 
 def _make_json_file(data: dict, filename: str = "test-event.json") -> Path:
     """Write a JSON dict to a temp file and return its path."""
-    tmp = tempfile.NamedTemporaryFile(suffix=".json", prefix=filename[:-5] + "_", delete=False)
-    tmp.write(json.dumps(data).encode())
-    tmp.close()
+    with tempfile.NamedTemporaryFile(
+        suffix=".json", prefix=filename[:-5] + "_", delete=False
+    ) as tmp:
+        tmp.write(json.dumps(data).encode())
     return Path(tmp.name)
 
 
