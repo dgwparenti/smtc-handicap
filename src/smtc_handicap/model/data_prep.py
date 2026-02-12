@@ -158,10 +158,21 @@ def _filter_min_runs(df: pd.DataFrame, min_runs: int) -> pd.DataFrame:
 
 
 def _filter_outliers(df: pd.DataFrame, start_position: str) -> pd.DataFrame:
-    """Remove times > 3x the median or < 10s for this start position."""
-    median_time = df["finish_time"].median()
-    cutoff = 3.0 * median_time
-    return df[(df["finish_time"] >= 10.0) & (df["finish_time"] <= cutoff)].reset_index(drop=True)
+    """Remove times outside position-specific bounds.
+
+    For TOP: 49.7–70.0s (excludes Junction-length times below and slow
+    beginner times above that inflate observation noise).
+    For other positions: 10s floor + 3× median upper bound.
+    """
+    if start_position == "TOP":
+        lower_bound = 49.7
+        upper_bound = 70.0
+    else:
+        lower_bound = 10.0
+        upper_bound = 3.0 * df["finish_time"].median()
+    return df[(df["finish_time"] >= lower_bound) & (df["finish_time"] <= upper_bound)].reset_index(
+        drop=True
+    )
 
 
 def _build_index_map(unique_ids: np.ndarray) -> dict[str, int]:
