@@ -1,6 +1,6 @@
 # Progress
 
-## Current Branch: `feature/bayesian-handicap-model`
+## Current Branch: `feature/json-ingestion`
 
 ### Completed
 
@@ -17,17 +17,26 @@
   - Diagnostics (`model/diagnostics.py`): R-hat, ESS, divergence checks via arviz
   - Predict (`model/predict.py`): Posterior handicap calculation with credible intervals, post-hoc per-rider consistency
   - Both TOP (N=1220, J=174, R=8) and JUNCTION (N=1528, J=264, R=3) models converge cleanly: R-hat=1.000, ESS>900, 0 divergences, ~5-8s runtime
+- **JSON ingestion plan approved** — Plan transcript: `1270f3a9-2870-46dc-8450-970e919c920e.jsonl`
+- **Branch `feature/json-ingestion` created**, all key source files read and JSON structure inspected
+
+### JSON Ingestion — Not Yet Implemented
+
+Branch created and plan approved, but no code written yet. Key files to create/modify:
+- **NEW**: `src/smtc_handicap/json_parser.py`
+- **MODIFY**: `src/smtc_handicap/pipeline.py` (add `ingest_single_json`, `ingest_all_jsons`)
+- **MODIFY**: `scripts/ingest_pdfs.py` (add `--json-dir` argument)
+- **MODIFY**: `src/smtc_handicap/pdf_parser.py` (extract `_make_race_id()` to be importable)
+
+### Next Session TODO
+
+1. **Implement JSON ingestion** — write `json_parser.py`, update pipeline and CLI script
+2. **Wipe DB and run full ingestion** from 329 JSONs + 440 PDFs
+3. **Verify data** — spot-check JSON-sourced and PDF-only races
+4. **Retrain the Bayesian handicap model** with the expanded dataset
 
 ### Observations / Known Issues
 
 - `sigma_obs=15.0` hits the upper bound for TOP model — suggests high residual variance in the data (diverse rider population). May warrant investigation or a higher cap.
 - With S=1 (single season), the season component is effectively disabled via tight prior (sigma_season_sd=0.01). Will become useful when multi-season data is available.
 - `beta_improve ≈ -0.05` for SL riders — slight improvement per run but credible interval crosses zero with current data.
-
-### Next Steps
-
-- **Validate against committee handicaps** — Compare model-suggested handicaps to actual committee handicaps in the DB, compute MAE
-- **Investigate sigma_obs cap** — Determine if the 15s upper bound is too restrictive or if the high residual variance is expected
-- **Merge to develop** — PR `feature/pdf-parsing-pipeline` → `develop`, then `feature/bayesian-handicap-model` → `develop`
-- **Streamlit UI** — Implement the Handicap Explorer app per the UI spec
-- **Incremental PDF ingestion** — Skip already-processed PDFs, handle new downloads

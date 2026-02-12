@@ -322,7 +322,7 @@ def detect_sections(lines: list[str], filename_meta: dict) -> list[Section]:
 # ---------------------------------------------------------------------------
 
 
-def _make_race_id(
+def make_race_id(
     name: str,
     start_pos: str,
     date: datetime.date,
@@ -387,7 +387,7 @@ def parse_practice_section(
     section: Section, race_date: datetime.date, pdf_source: str
 ) -> tuple[Race, list[Rider], list[TimeRecord]]:
     """Parse a PRACTICE section."""
-    race_id = _make_race_id("PRACTICE", section.start_position, race_date, is_practice=True)
+    race_id = make_race_id("PRACTICE", section.start_position, race_date, is_practice=True)
     race = Race(
         race_id=race_id,
         name="PRACTICE",
@@ -470,7 +470,7 @@ def parse_race_section(
     is_handicap = section.section_type == "RACE_HANDICAP"
     is_day2 = section.day_number is not None and section.day_number >= 2
 
-    race_id = _make_race_id(
+    race_id = make_race_id(
         section.race_name,
         section.start_position,
         race_date,
