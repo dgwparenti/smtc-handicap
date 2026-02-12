@@ -12,6 +12,9 @@ from urllib.parse import unquote, urlparse
 import requests
 from bs4 import BeautifulSoup
 
+from smtc_handicap.json_extractor import extract_race_data, has_ride_data, save_race_json
+from smtc_handicap.pdf_generator import generate_results_pdf
+
 logger = logging.getLogger(__name__)
 
 BASE_URL = "https://www.cresta-run.com"
@@ -80,12 +83,26 @@ def scrape_season_events(season_slug: str) -> list[dict]:
 # ------------------------------------------------------------------
 
 
-def scrape_event_pdf_urls(event_path: str, _visited: set[str] | None = None) -> list[dict]:
+def _fetch_event_page(event_path: str) -> tuple[str, BeautifulSoup]:
+    """Fetch an event page, returning raw HTML text and parsed soup."""
+    rel_path = event_path if event_path.startswith("/") else f"/{event_path.split('.com', 1)[-1]}"
+    full_url = f"{BASE_URL}{rel_path}"
+    resp = _get(full_url)
+    resp.raise_for_status()
+    return resp.text, BeautifulSoup(resp.text, "lxml")
+
+
+def scrape_event_pdf_urls(
+    event_path: str,
+    _visited: set[str] | None = None,
+    soup: BeautifulSoup | None = None,
+) -> list[dict]:
     """Extract result PDF URLs from an event page.
 
     Args:
         event_path: Relative URL path, e.g. "/events-races/heaton-2025-01-04".
         _visited: Internal set tracking visited paths to prevent circular recursion.
+        soup: Pre-parsed BeautifulSoup; if provided, skips the HTTP fetch.
 
     Returns:
         List of dicts with keys: url, label, source_page.
@@ -101,9 +118,9 @@ def scrape_event_pdf_urls(event_path: str, _visited: set[str] | None = None) -> 
     _visited.add(rel_path)
 
     full_url = f"{BASE_URL}{rel_path}"
-    resp = _get(full_url)
-    resp.raise_for_status()
-    soup = BeautifulSoup(resp.text, "lxml")
+
+    if soup is None:
+        _, soup = _fetch_event_page(event_path)
 
     pdfs: list[dict] = []
 
@@ -239,7 +256,8 @@ def _save_log(log_file: Path, log: list[dict]) -> None:
 
 def _processed_urls(log: list[dict]) -> set[str]:
     """Return set of event URLs already processed successfully."""
-    return {entry["event_url"] for entry in log if entry.get("status") == "success"}
+    done_statuses = {"success", "json_extracted"}
+    return {entry["event_url"] for entry in log if entry.get("status") in done_statuses}
 
 
 # ------------------------------------------------------------------
@@ -247,24 +265,37 @@ def _processed_urls(log: list[dict]) -> set[str]:
 # ------------------------------------------------------------------
 
 
+def _build_event_slug(event_url: str, event_date: str) -> str:
+    """Build a slug like '20211224_practice-2022-2687-12-24' from event metadata."""
+    date_compact = event_date.replace("-", "")
+    slug = event_url.rstrip("/").split("/")[-1]
+    return f"{date_compact}_{slug}"
+
+
 def scrape_and_download(
     seasons: list[str],
     output_dir: Path | str,
     log_file: Path | str,
+    json_output_dir: Path | str | None = None,
 ) -> dict:
     """Scrape seasons and download all available result PDFs.
+
+    For events without CDN PDFs, attempts to extract embedded JSON race data
+    and generate archival PDFs.
 
     Args:
         seasons: List of season slugs, e.g. ["2024-25", "2023-24"].
         output_dir: Directory to save downloaded PDFs.
         log_file: Path to JSON log for idempotency tracking.
+        json_output_dir: Directory to save extracted JSON files (optional).
 
     Returns:
-        Summary dict with counts: seasons_scraped, events_found,
-        pdfs_downloaded, pdfs_skipped, pdfs_failed, pdfs_no_pdf.
+        Summary dict with counts.
     """
     output_dir = Path(output_dir)
     log_file = Path(log_file)
+    if json_output_dir is not None:
+        json_output_dir = Path(json_output_dir)
 
     log = _load_log(log_file)
     done_urls = _processed_urls(log)
@@ -276,6 +307,9 @@ def scrape_and_download(
         "pdfs_skipped": 0,
         "pdfs_failed": 0,
         "pdfs_no_pdf": 0,
+        "json_extracted": 0,
+        "json_empty": 0,
+        "pdfs_generated": 0,
     }
 
     for season in seasons:
@@ -305,31 +339,60 @@ def scrape_and_download(
 
             try:
                 time.sleep(RATE_LIMIT_SECONDS)
-                pdfs = scrape_event_pdf_urls(event_url)
+                html_text, soup = _fetch_event_page(event_url)
 
-                if not pdfs:
-                    entry["status"] = "no_pdf"
-                    entry["note"] = "No result PDF found on event page"
-                    summary["pdfs_no_pdf"] += 1
-                    log.append(entry)
-                    continue
+                pdfs = scrape_event_pdf_urls(event_url, soup=soup)
 
-                # Download the first result PDF (typically one per event)
-                pdf_info = pdfs[0]
-                filename = build_filename(event["date"], event_url, pdf_info["url"])
-                entry["pdf_url"] = pdf_info["url"]
-                entry["local_filename"] = filename
+                if pdfs:
+                    # CDN PDF path (existing logic)
+                    pdf_info = pdfs[0]
+                    filename = build_filename(event["date"], event_url, pdf_info["url"])
+                    entry["pdf_url"] = pdf_info["url"]
+                    entry["local_filename"] = filename
 
-                result = download_pdf(pdf_info["url"], output_dir, filename)
+                    result = download_pdf(pdf_info["url"], output_dir, filename)
 
-                if result and result.exists():
-                    entry["status"] = "success"
-                    entry["local_path"] = str(result)
-                    summary["pdfs_downloaded"] += 1
-                    done_urls.add(event_url)
+                    if result and result.exists():
+                        entry["status"] = "success"
+                        entry["local_path"] = str(result)
+                        summary["pdfs_downloaded"] += 1
+                        done_urls.add(event_url)
+                    else:
+                        entry["error"] = "Download failed or invalid PDF"
+                        summary["pdfs_failed"] += 1
                 else:
-                    entry["error"] = "Download failed or invalid PDF"
-                    summary["pdfs_failed"] += 1
+                    # JSON extraction fallback
+                    race_data = extract_race_data(html_text)
+
+                    if race_data and has_ride_data(race_data):
+                        slug = _build_event_slug(event_url, event["date"])
+
+                        # Save JSON
+                        if json_output_dir is not None:
+                            save_race_json(race_data, json_output_dir, f"{slug}.json")
+                            entry["json_filename"] = f"{slug}.json"
+
+                        # Generate PDF
+                        pdf_path = output_dir / f"{slug}.pdf"
+                        gen_result = generate_results_pdf(race_data, pdf_path)
+                        if gen_result:
+                            summary["pdfs_generated"] += 1
+                            entry["local_path"] = str(gen_result)
+                            entry["local_filename"] = f"{slug}.pdf"
+
+                        entry["status"] = "json_extracted"
+                        summary["json_extracted"] += 1
+                        done_urls.add(event_url)
+
+                    elif race_data:
+                        entry["status"] = "empty_data"
+                        entry["note"] = "Race JSON found but no ride data"
+                        summary["json_empty"] += 1
+
+                    else:
+                        entry["status"] = "no_pdf"
+                        entry["note"] = "No result PDF or embedded JSON found"
+                        summary["pdfs_no_pdf"] += 1
 
             except Exception as e:
                 logger.error("Error processing %s: %s", event["title"], e)

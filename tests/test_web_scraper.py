@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import html as html_mod
 import json
 from pathlib import Path
 from unittest.mock import patch
@@ -88,6 +89,75 @@ EVENT_FALLBACK_PDF_HTML = """
 </div>
 </body></html>
 """
+
+# Season HTML with a single practice event (for JSON extraction tests)
+SEASON_SINGLE_PRACTICE_HTML = """
+<html><body>
+<div class="ec-col-item w-dyn-item" role="listitem">
+  <div class="ec-title-backup">PRACTICE 2022 3687</div>
+  <div class="ec-date">2021-12-24</div>
+  <div class="ec-category">practice</div>
+  <a class="ec-link" href="/events-races/practice-2022-3687-12-24">Link</a>
+</div>
+</body></html>
+"""
+
+_SAMPLE_RACE_JSON = {
+    "EventName": "PRACTICE 2022 3687",
+    "EventDate": "2021-12-24",
+    "EventType": "N",
+    "IsPractice": True,
+    "Rides": [
+        {
+            "NamePrint": "J. Smith",
+            "CourseStart": "J",
+            "T_Total": "01:02.34",
+            "Speed": "82.5",
+            "FallDescription": "",
+            "IsScratched": False,
+            "NotRacing": False,
+        },
+    ],
+    "Standings": [],
+}
+
+
+def _make_event_html_with_json(race_data: dict) -> str:
+    """Build an event page HTML with embedded JSON but no CDN PDF links."""
+    encoded = html_mod.escape(json.dumps(race_data))
+    return f"""
+    <html><body>
+    <div class="print-button-wrapper">
+      <a href="#">Print Results</a>
+    </div>
+    <script>
+    const drawData = decodeHtml("");
+    const raceData = decodeHtml("{encoded}");
+    </script>
+    </body></html>
+    """
+
+
+def _make_event_html_empty_json() -> str:
+    """Event page with raceData JSON but empty Rides list."""
+    data = {
+        "EventName": "CANCELLED EVENT",
+        "EventDate": "2022-01-15",
+        "IsPractice": False,
+        "Rides": [],
+        "Standings": [],
+    }
+    encoded = html_mod.escape(json.dumps(data))
+    return f"""
+    <html><body>
+    <div class="print-button-wrapper">
+      <a href="#">Print Results</a>
+    </div>
+    <script>
+    const raceData = decodeHtml("{encoded}");
+    </script>
+    </body></html>
+    """
 
 
 # ======================================================================
@@ -364,3 +434,104 @@ class TestScrapeAndDownload:
 
         assert summary["pdfs_skipped"] == 1
         assert summary["pdfs_downloaded"] == 0
+
+    @responses.activate
+    @patch("smtc_handicap.web_scraper.RATE_LIMIT_SECONDS", 0)
+    def test_json_extraction_when_no_pdf(self, tmp_path):
+        """When no CDN PDF is found, extract embedded JSON and generate PDF."""
+        responses.add(
+            responses.GET,
+            "https://www.cresta-run.com/season/2021-22",
+            body=SEASON_SINGLE_PRACTICE_HTML,
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "https://www.cresta-run.com/events-races/practice-2022-3687-12-24",
+            body=_make_event_html_with_json(_SAMPLE_RACE_JSON),
+            status=200,
+        )
+
+        log_file = tmp_path / "log.json"
+        summary = scrape_and_download(
+            ["2021-22"],
+            output_dir=tmp_path / "pdfs",
+            log_file=log_file,
+            json_output_dir=tmp_path / "json",
+        )
+
+        assert summary["json_extracted"] == 1
+        assert summary["pdfs_generated"] == 1
+        assert summary["pdfs_no_pdf"] == 0
+
+        # Verify JSON was saved
+        json_files = list((tmp_path / "json").glob("*.json"))
+        assert len(json_files) == 1
+
+        # Verify PDF was generated
+        pdf_files = list((tmp_path / "pdfs").glob("*.pdf"))
+        assert len(pdf_files) == 1
+        assert pdf_files[0].read_bytes()[:5] == b"%PDF-"
+
+        # Verify log entry
+        log = json.loads(log_file.read_text())
+        assert log[0]["status"] == "json_extracted"
+
+    @responses.activate
+    @patch("smtc_handicap.web_scraper.RATE_LIMIT_SECONDS", 0)
+    def test_empty_race_data_logged(self, tmp_path):
+        """Events with JSON but no rides should log as empty_data."""
+        responses.add(
+            responses.GET,
+            "https://www.cresta-run.com/season/2021-22",
+            body=SEASON_SINGLE_PRACTICE_HTML,
+            status=200,
+        )
+        responses.add(
+            responses.GET,
+            "https://www.cresta-run.com/events-races/practice-2022-3687-12-24",
+            body=_make_event_html_empty_json(),
+            status=200,
+        )
+
+        log_file = tmp_path / "log.json"
+        summary = scrape_and_download(
+            ["2021-22"],
+            output_dir=tmp_path / "pdfs",
+            log_file=log_file,
+        )
+
+        assert summary["json_empty"] == 1
+        assert summary["json_extracted"] == 0
+
+        log = json.loads(log_file.read_text())
+        assert log[0]["status"] == "empty_data"
+
+    @responses.activate
+    @patch("smtc_handicap.web_scraper.RATE_LIMIT_SECONDS", 0)
+    def test_idempotent_with_json_extracted(self, tmp_path):
+        """Events with json_extracted status should be skipped on rerun."""
+        log_file = tmp_path / "log.json"
+        log_file.write_text(json.dumps([
+            {
+                "event_url": "/events-races/practice-2022-3687-12-24",
+                "status": "json_extracted",
+            }
+        ]))
+
+        responses.add(
+            responses.GET,
+            "https://www.cresta-run.com/season/2021-22",
+            body=SEASON_SINGLE_PRACTICE_HTML,
+            status=200,
+        )
+        # Should NOT fetch the event page since it's already processed
+
+        summary = scrape_and_download(
+            ["2021-22"],
+            output_dir=tmp_path / "pdfs",
+            log_file=log_file,
+        )
+
+        assert summary["pdfs_skipped"] == 1
+        assert summary["json_extracted"] == 0
