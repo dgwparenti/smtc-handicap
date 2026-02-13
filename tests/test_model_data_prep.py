@@ -14,25 +14,45 @@ from smtc_handicap.models import Race, Rider, TimeRecord
 
 @pytest.fixture()
 def sample_db(tmp_path):
-    """Create a small in-memory DB with known data for testing."""
+    """Create a small in-memory DB with known data spanning two seasons."""
     db_path = tmp_path / "test.db"
     db = CrestaDB(db_path)
 
     # --- Riders ---
     riders = [
         Rider(
-            "rider_a", "A. Alpha", "GBR", is_sl=False, first_seen_date=datetime.date(2025, 1, 1)
+            "rider_a", "A. Alpha", "GBR", is_sl=False, first_seen_date=datetime.date(2024, 1, 1)
         ),
-        Rider("rider_b", "B. Bravo", "SUI", is_sl=True, first_seen_date=datetime.date(2025, 1, 1)),
+        Rider("rider_b", "B. Bravo", "SUI", is_sl=True, first_seen_date=datetime.date(2024, 1, 1)),
         Rider(
-            "rider_c", "C. Charlie", "USA", is_sl=False, first_seen_date=datetime.date(2025, 1, 1)
+            "rider_c", "C. Charlie", "USA", is_sl=False, first_seen_date=datetime.date(2024, 1, 1)
         ),
     ]
     for r in riders:
         db.upsert_rider(r)
 
-    # --- Races ---
+    # --- Races (two seasons: 2024 and 2025) ---
     races = [
+        # Season 2024
+        Race(
+            "PRACTICE_TOP_2024-01-10",
+            "PRACTICE",
+            datetime.date(2024, 1, 10),
+            "TOP",
+            is_handicap_race=False,
+            is_practice=True,
+            pdf_source="p1.pdf",
+        ),
+        Race(
+            "STAGNI_CUP_2024-01-15",
+            "THE STAGNI CUP",
+            datetime.date(2024, 1, 15),
+            "TOP",
+            is_handicap_race=True,
+            is_practice=False,
+            pdf_source="p2.pdf",
+        ),
+        # Season 2025
         Race(
             "PRACTICE_TOP_2025-01-10",
             "PRACTICE",
@@ -40,7 +60,7 @@ def sample_db(tmp_path):
             "TOP",
             is_handicap_race=False,
             is_practice=True,
-            pdf_source="p1.pdf",
+            pdf_source="p3.pdf",
         ),
         Race(
             "STAGNI_CUP_2025-01-15",
@@ -49,8 +69,9 @@ def sample_db(tmp_path):
             "TOP",
             is_handicap_race=True,
             is_practice=False,
-            pdf_source="p2.pdf",
+            pdf_source="p4.pdf",
         ),
+        # JUNCTION race (season 2025)
         Race(
             "PRACTICE_JUNC_2025-01-10",
             "PRACTICE",
@@ -66,30 +87,34 @@ def sample_db(tmp_path):
 
     # --- Time records ---
     records = [
-        # Practice TOP — rider_a: 2 runs
-        TimeRecord("r1", "PRACTICE_TOP_2025-01-10", "rider_a", 1, finish_time=55.0),
-        TimeRecord("r2", "PRACTICE_TOP_2025-01-10", "rider_a", 2, finish_time=54.5),
-        # Practice TOP — rider_b (SL): 1 run
-        TimeRecord("r3", "PRACTICE_TOP_2025-01-10", "rider_b", 1, finish_time=60.0),
-        # Practice TOP — rider_c: 1 run, a fall (should be excluded)
+        # Season 2024 — Practice TOP
+        TimeRecord("r1", "PRACTICE_TOP_2024-01-10", "rider_a", 1, finish_time=55.0),
+        TimeRecord("r2", "PRACTICE_TOP_2024-01-10", "rider_a", 2, finish_time=54.5),
+        TimeRecord("r3", "PRACTICE_TOP_2024-01-10", "rider_b", 1, finish_time=60.0),
+        # rider_c fall (should be excluded)
         TimeRecord(
             "r4",
-            "PRACTICE_TOP_2025-01-10",
+            "PRACTICE_TOP_2024-01-10",
             "rider_c",
             1,
             finish_time=None,
             is_fall=True,
             fall_location="S",
         ),
-        # Practice TOP — rider_c: 1 valid run
-        TimeRecord("r5", "PRACTICE_TOP_2025-01-10", "rider_c", 2, finish_time=57.0),
-        # Stagni Cup TOP — rider_a
-        TimeRecord("r6", "STAGNI_CUP_2025-01-15", "rider_a", 1, finish_time=53.0),
-        # Stagni Cup TOP — rider_b (SL)
-        TimeRecord("r7", "STAGNI_CUP_2025-01-15", "rider_b", 1, finish_time=58.5),
-        # Stagni Cup TOP — rider_c
-        TimeRecord("r8", "STAGNI_CUP_2025-01-15", "rider_c", 1, finish_time=56.0),
-        # JUNCTION practice — rider_a (different start position)
+        TimeRecord("r5", "PRACTICE_TOP_2024-01-10", "rider_c", 2, finish_time=57.0),
+        # Season 2024 — Stagni Cup TOP
+        TimeRecord("r6", "STAGNI_CUP_2024-01-15", "rider_a", 1, finish_time=53.0),
+        TimeRecord("r7", "STAGNI_CUP_2024-01-15", "rider_b", 1, finish_time=58.5),
+        TimeRecord("r8", "STAGNI_CUP_2024-01-15", "rider_c", 1, finish_time=56.0),
+        # Season 2025 — Practice TOP
+        TimeRecord("r10", "PRACTICE_TOP_2025-01-10", "rider_a", 1, finish_time=54.0),
+        TimeRecord("r11", "PRACTICE_TOP_2025-01-10", "rider_b", 1, finish_time=59.0),
+        TimeRecord("r12", "PRACTICE_TOP_2025-01-10", "rider_c", 1, finish_time=56.5),
+        # Season 2025 — Stagni Cup TOP
+        TimeRecord("r13", "STAGNI_CUP_2025-01-15", "rider_a", 1, finish_time=52.5),
+        TimeRecord("r14", "STAGNI_CUP_2025-01-15", "rider_b", 1, finish_time=58.0),
+        TimeRecord("r15", "STAGNI_CUP_2025-01-15", "rider_c", 1, finish_time=55.5),
+        # JUNCTION record
         TimeRecord("r9", "PRACTICE_JUNC_2025-01-10", "rider_a", 1, finish_time=45.0),
     ]
     for rec in records:
@@ -104,14 +129,14 @@ class TestBuildStanData:
         data = build_stan_data(sample_db, "TOP", min_runs=1)
         assert data["N"] > 0
         assert data["J"] > 0
-        assert data["S"] == 1
+        assert data["S"] == 2  # two seasons: 2024, 2025
         assert data["R"] > 0
 
     def test_fall_excluded(self, sample_db):
         """Falls should not appear in the data."""
         data = build_stan_data(sample_db, "TOP", min_runs=1)
-        # We have 7 valid TOP records (r1,r2,r3,r5,r6,r7,r8), 1 fall excluded (r4)
-        assert data["N"] == 7
+        # 14 valid TOP records (r1-r3,r5-r8,r10-r15), 1 fall excluded (r4)
+        assert data["N"] == 13
 
     def test_junction_separation(self, sample_db):
         """JUNCTION data should be separate from TOP."""
@@ -146,15 +171,20 @@ class TestBuildStanData:
         # rider_a is not SL
         assert is_sl[rider_map["rider_a"] - 1] == 0
 
-    def test_run_seq_per_rider(self, sample_db):
+    def test_run_seq_per_rider_per_season(self, sample_db):
+        """run_seq should reset for each season."""
         data = build_stan_data(sample_db, "TOP", min_runs=1)
         df = data["meta_df"]
-        # rider_a has 3 valid TOP runs (r1, r2, r6) -> run_seq 1, 2, 3
-        rider_a_seqs = sorted(df.loc[df["rider_id"] == "rider_a", "run_seq"].tolist())
-        assert rider_a_seqs == [1, 2, 3]
-        # rider_b has 2 valid TOP runs (r3, r7) -> run_seq 1, 2
-        rider_b_seqs = sorted(df.loc[df["rider_id"] == "rider_b", "run_seq"].tolist())
-        assert rider_b_seqs == [1, 2]
+        # rider_a has 3 runs in season 2024 (r1, r2, r6) -> run_seq 1, 2, 3
+        rider_a_s1 = df.loc[
+            (df["rider_id"] == "rider_a") & (df["season"] == 2024), "run_seq"
+        ].tolist()
+        assert sorted(rider_a_s1) == [1, 2, 3]
+        # rider_a has 2 runs in season 2025 (r10, r13) -> run_seq 1, 2 (resets!)
+        rider_a_s2 = df.loc[
+            (df["rider_id"] == "rider_a") & (df["season"] == 2025), "run_seq"
+        ].tolist()
+        assert sorted(rider_a_s2) == [1, 2]
 
     def test_prior_mu_top(self, sample_db):
         data = build_stan_data(sample_db, "TOP", min_runs=1)
@@ -172,7 +202,7 @@ class TestBuildStanData:
         with pytest.raises(ValueError, match="start_position must be"):
             build_stan_data(sample_db, "BOTTOM")
 
-    def test_outlier_filtering(self, tmp_path):
+    def test_outlier_filtering_high(self, tmp_path):
         """Times > 3x median should be excluded."""
         db_path = tmp_path / "outlier.db"
         db = CrestaDB(db_path)
@@ -215,6 +245,35 @@ class TestBuildStanData:
         assert 200.0 not in data["y"]
         assert data["N"] == 10
 
+    def test_outlier_filtering_low(self, tmp_path):
+        """Times < 10s (e.g. 0.0) should be excluded."""
+        db_path = tmp_path / "zero.db"
+        db = CrestaDB(db_path)
+
+        db.upsert_rider(Rider("r1", "Test", "GBR", first_seen_date=datetime.date(2025, 1, 1)))
+        db.insert_race(
+            Race(
+                "PRAC_2025-01-10",
+                "PRACTICE",
+                datetime.date(2025, 1, 10),
+                "TOP",
+                is_handicap_race=False,
+                is_practice=True,
+            )
+        )
+
+        # Normal times plus one zero-time record
+        for i in range(5):
+            db.insert_time_record(
+                TimeRecord(f"rec_{i}", "PRAC_2025-01-10", "r1", i + 1, finish_time=55.0 + i)
+            )
+        db.insert_time_record(TimeRecord("zero", "PRAC_2025-01-10", "r1", 6, finish_time=0.0))
+        db.close()
+
+        data = build_stan_data(db_path, "TOP", min_runs=1)
+        assert 0.0 not in data["y"]
+        assert data["N"] == 5
+
     def test_stan_data_array_lengths(self, sample_db):
         """All observation-level arrays must have length N."""
         data = build_stan_data(sample_db, "TOP", min_runs=1)
@@ -231,17 +290,80 @@ class TestBuildStanData:
 
     def test_min_runs_filtering(self, sample_db):
         """min_runs=3 should exclude riders with < 3 observations."""
-        # With min_runs=1: all 3 riders included (rider_a:3, rider_b:2, rider_c:2)
+        # With min_runs=1: all 3 riders included
         data_all = build_stan_data(sample_db, "TOP", min_runs=1)
         assert data_all["J"] == 3
 
-        # With min_runs=3: only rider_a (3 runs) survives
-        data_filtered = build_stan_data(sample_db, "TOP", min_runs=3)
+        # With min_runs=5: only rider_a (5 runs) survives
+        data_filtered = build_stan_data(sample_db, "TOP", min_runs=5)
         assert data_filtered["J"] == 1
-        assert data_filtered["N"] == 3
+        assert data_filtered["N"] == 5
         assert "rider_a" in data_filtered["meta_rider_map"]
 
-    def test_prior_sigma_season_sd(self, sample_db):
-        """With S=1, prior_sigma_season_sd should be 0.01."""
+    def test_season_num_centered(self, sample_db):
+        """season_num should be centered around zero."""
         data = build_stan_data(sample_db, "TOP", min_runs=1)
-        assert data["prior_sigma_season_sd"] == 0.01
+        season_num = data["season_num"]
+        assert len(season_num) == data["S"]
+        assert abs(np.mean(season_num)) < 1e-10  # centered
+
+    def test_season_num_values(self, sample_db):
+        """Two seasons (2024, 2025) should give season_num [-0.5, 0.5]."""
+        data = build_stan_data(sample_db, "TOP", min_runs=1)
+        np.testing.assert_allclose(data["season_num"], [-0.5, 0.5])
+
+    def test_season_indices_contiguous(self, sample_db):
+        data = build_stan_data(sample_db, "TOP", min_runs=1)
+        season_indices = data["season"]
+        assert min(season_indices) == 1
+        assert max(season_indices) == data["S"]
+
+    def test_no_prior_sigma_season_sd(self, sample_db):
+        """prior_sigma_season_sd should no longer be in the output."""
+        data = build_stan_data(sample_db, "TOP", min_runs=1)
+        assert "prior_sigma_season_sd" not in data
+
+    def test_race_type_normalization(self, sample_db):
+        """'THE STAGNI CUP' should be normalized to 'STAGNI CUP'."""
+        data = build_stan_data(sample_db, "TOP", min_runs=1)
+        race_type_map = data["meta_race_type_map"]
+        assert "STAGNI CUP" in race_type_map
+        assert "THE STAGNI CUP" not in race_type_map
+
+    def test_rnr_riders_included(self, tmp_path):
+        """RnR riders (is_dnf=1, is_fall=0, finish_time IS NOT NULL) should be included."""
+        db_path = tmp_path / "rnr.db"
+        db = CrestaDB(db_path)
+
+        db.upsert_rider(Rider("r1", "Test", "GBR", first_seen_date=datetime.date(2025, 1, 1)))
+        db.insert_race(
+            Race(
+                "PRAC_2025-01-10",
+                "PRACTICE",
+                datetime.date(2025, 1, 10),
+                "TOP",
+                is_handicap_race=False,
+                is_practice=True,
+            )
+        )
+
+        # Normal records
+        for i in range(3):
+            db.insert_time_record(
+                TimeRecord(f"rec_{i}", "PRAC_2025-01-10", "r1", i + 1, finish_time=55.0 + i)
+            )
+        # RnR record: is_dnf=True, is_fall=False, has finish_time
+        db.insert_time_record(
+            TimeRecord("rnr", "PRAC_2025-01-10", "r1", 4, finish_time=58.0, is_dnf=True)
+        )
+        db.close()
+
+        data = build_stan_data(db_path, "TOP", min_runs=1)
+        assert data["N"] == 4  # RnR included
+        assert 58.0 in data["y"]
+
+    def test_meta_season_map(self, sample_db):
+        """meta_season_map should map season years to 1-based indices."""
+        data = build_stan_data(sample_db, "TOP", min_runs=1)
+        season_map = data["meta_season_map"]
+        assert season_map == {2024: 1, 2025: 2}

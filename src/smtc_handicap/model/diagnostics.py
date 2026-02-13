@@ -40,6 +40,7 @@ def check_diagnostics(fit: CmdStanMCMC, stan_data: dict | None = None) -> dict:
             "race_type": stan_data["race_type"],
             "is_sl": stan_data["is_sl"],
             "run_seq": stan_data["run_seq"],
+            "season_num": stan_data["season_num"],
         }
 
     idata = az.from_cmdstanpy(fit, **az_kwargs)
@@ -55,6 +56,8 @@ def check_diagnostics(fit: CmdStanMCMC, stan_data: dict | None = None) -> dict:
         "sigma_obs",
         "sigma_season",
         "sigma_race",
+        "beta_trend_mu",
+        "sigma_trend",
         "beta_improve",
     ]
     summary = az.summary(idata, var_names=key_params)
