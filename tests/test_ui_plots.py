@@ -7,13 +7,13 @@ pytest.importorskip("scipy", reason="scipy not installed (install with [ui])")
 
 pytestmark = pytest.mark.ui
 
-from smtc_handicap.ui.plots import (
+from smtc_handicap.ui.plots import (  # noqa: E402
     _smoothed_histogram,
     plot_handicap_comparison,
     plot_rider_performance,
     plot_rider_vs_field,
 )
-from smtc_handicap.ui.queries import (
+from smtc_handicap.ui.queries import (  # noqa: E402
     FieldTimeSummary,
     HandicapComparison,
     RiderTimeSummary,
