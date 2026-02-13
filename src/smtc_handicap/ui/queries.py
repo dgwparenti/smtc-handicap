@@ -111,7 +111,7 @@ class BayesianModel:
         max_season = _date_to_season(max_date)
         mean_year = max_season - self.season_num[-1]
         season_years = np.round(self.season_num + mean_year).astype(int)
-        return dict(zip(season_years.tolist(), self.season_num.tolist()))
+        return dict(zip(season_years.tolist(), self.season_num.tolist(), strict=False))
 
     def get_estimated_time(self, rider_id: str, season_year: int) -> float | None:
         """Return posterior-mean estimated time for a rider in a season."""

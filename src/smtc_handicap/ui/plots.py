@@ -138,7 +138,7 @@ def plot_rider_performance(summary: RiderTimeSummary) -> go.Figure:
                 y=y,
                 mode="lines",
                 fill="tozeroy",
-                fillcolor=f"rgba(31,119,180,0.3)",
+                fillcolor="rgba(31,119,180,0.3)",
                 line=dict(color=BLUE, width=2),
                 name=f"All time ({len(summary.all_times)} runs)",
             )
@@ -217,7 +217,10 @@ def plot_rider_vs_field(
                 fill="tozeroy",
                 fillcolor="rgba(174,199,232,0.3)",
                 line=dict(color=LIGHT_BLUE, width=1.5),
-                name=f"All riders ({field_summary.n_riders} riders, {len(field_summary.all_times)} runs)",
+                name=(
+                    f"All riders ({field_summary.n_riders} riders,"
+                    f" {len(field_summary.all_times)} runs)"
+                ),
             )
         )
 

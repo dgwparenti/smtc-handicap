@@ -7,9 +7,7 @@ import pytest
 from smtc_handicap.db import CrestaDB
 from smtc_handicap.models import Race, Rider, TimeRecord
 from smtc_handicap.ui.queries import (
-    FieldTimeSummary,
     HandicapComparison,
-    RiderTimeSummary,
     _date_to_season,
     get_available_seasons,
     get_field_time_summary,

@@ -86,7 +86,6 @@ def main() -> None:
             format_func=lambda i: rider_names[i],
         )
         selected_rider_id = rider_ids[rider_idx]
-        selected_rider_name = rider_names[rider_idx]
 
         st.divider()
 

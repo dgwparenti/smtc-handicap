@@ -1,7 +1,6 @@
 """Smoke tests for the Handicap Explorer UI chart layer."""
 
 import plotly.graph_objects as go
-import pytest
 
 from smtc_handicap.ui.plots import (
     _smoothed_histogram,
