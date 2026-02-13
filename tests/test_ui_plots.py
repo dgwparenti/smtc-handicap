@@ -1,6 +1,11 @@
 """Smoke tests for the Handicap Explorer UI chart layer."""
 
-import plotly.graph_objects as go
+import pytest
+
+go = pytest.importorskip("plotly.graph_objects", reason="plotly not installed (install with [ui])")
+pytest.importorskip("scipy", reason="scipy not installed (install with [ui])")
+
+pytestmark = pytest.mark.ui
 
 from smtc_handicap.ui.plots import (
     _smoothed_histogram,

@@ -4,6 +4,10 @@ import datetime
 
 import pytest
 
+pytest.importorskip("scipy", reason="scipy not installed (install with [ui])")
+
+pytestmark = pytest.mark.ui
+
 from smtc_handicap.db import CrestaDB
 from smtc_handicap.models import Race, Rider, TimeRecord
 from smtc_handicap.ui.queries import (
