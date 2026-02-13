@@ -68,6 +68,14 @@ class CrestaDB:
 
     def _create_tables(self) -> None:
         self.conn.executescript(SCHEMA_SQL)
+        self._run_migrations()
+
+    def _run_migrations(self) -> None:
+        """Apply schema migrations for columns added after initial release."""
+        cols = {row[1] for row in self.conn.execute("PRAGMA table_info(races)").fetchall()}
+        if "scratch_rider_id" not in cols:
+            self.conn.execute("ALTER TABLE races ADD COLUMN scratch_rider_id TEXT DEFAULT NULL")
+            self.conn.commit()
 
     # -- Rider --
 
@@ -260,6 +268,26 @@ class CrestaDB:
             fall_location=row[13],
             is_dnf=bool(row[14]),
         )
+
+    # -- Scratch rider --
+
+    def set_scratch_rider(self, race_id: str, rider_id: str) -> None:
+        """Set the scratch rider for a race."""
+        self.conn.execute(
+            "UPDATE races SET scratch_rider_id=? WHERE race_id=?",
+            (rider_id, race_id),
+        )
+        self.conn.commit()
+
+    def get_scratch_rider(self, race_id: str) -> str | None:
+        """Get the scratch rider_id for a race, or None."""
+        row = self.conn.execute(
+            "SELECT scratch_rider_id FROM races WHERE race_id=?",
+            (race_id,),
+        ).fetchone()
+        if row is None:
+            return None
+        return row[0]
 
     # -- Incremental ingestion helpers --
 

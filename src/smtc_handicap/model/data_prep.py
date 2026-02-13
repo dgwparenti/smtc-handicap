@@ -162,14 +162,15 @@ def _filter_outliers(df: pd.DataFrame, start_position: str) -> pd.DataFrame:
 
     For TOP: 49.7–70.0s (excludes Junction-length times below and slow
     beginner times above that inflate observation noise).
-    For other positions: 10s floor + 3× median upper bound.
+    For JUNCTION: 41.0–55.0s (explicit bounds based on course records and
+    reasonable beginner times).
     """
     if start_position == "TOP":
         lower_bound = 49.7
         upper_bound = 70.0
     else:
-        lower_bound = 10.0
-        upper_bound = 3.0 * df["finish_time"].median()
+        lower_bound = 41.0
+        upper_bound = 55.0
     return df[(df["finish_time"] >= lower_bound) & (df["finish_time"] <= upper_bound)].reset_index(
         drop=True
     )
