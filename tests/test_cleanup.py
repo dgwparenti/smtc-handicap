@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import sqlite3
+import sys
+from pathlib import Path
 
 import pytest
 
 # Import cleanup functions directly from the script
-import sys
-from pathlib import Path
-
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 from cleanup_db import (  # noqa: E402
     step1_remove_junk_times,
