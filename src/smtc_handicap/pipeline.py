@@ -9,6 +9,7 @@ from pathlib import Path
 from smtc_handicap.db import CrestaDB
 from smtc_handicap.json_parser import parse_json
 from smtc_handicap.pdf_parser import parse_pdf
+from smtc_handicap.validation import is_team_relay_race, is_valid_finish_time
 
 logger = logging.getLogger(__name__)
 
@@ -38,16 +39,36 @@ def _accumulate_stats(total: IngestStats, part: IngestStats) -> None:
 
 
 def _store_parsed(db: CrestaDB, parsed: object, stats: IngestStats) -> None:
-    """Store parsed data (from either PDF or JSON) into the DB."""
+    """Store parsed data (from either PDF or JSON) into the DB.
+
+    Applies validation guards:
+    - Skips team relay races entirely
+    - Rejects time records with invalid finish times (sub-1s or >100s)
+    """
     for rider in parsed.riders:
         db.upsert_rider(rider)
         stats.riders_upserted += 1
 
+    # Build race_id → start_position lookup and filter out relay races
+    race_positions: dict[str, str] = {}
+    skipped_race_ids: set[str] = set()
     for race in parsed.races:
+        if is_team_relay_race(race.name):
+            stats.warnings.append(f"Skipped relay race: {race.name} ({race.race_id})")
+            skipped_race_ids.add(race.race_id)
+            continue
         db.insert_race(race)
         stats.races_inserted += 1
+        race_positions[race.race_id] = race.start_position
 
     for record in parsed.time_records:
+        if record.race_id in skipped_race_ids:
+            continue
+        if not is_valid_finish_time(record.finish_time):
+            stats.warnings.append(
+                f"Rejected invalid time {record.finish_time}s: {record.record_id}"
+            )
+            continue
         db.insert_time_record(record)
         stats.time_records_inserted += 1
 
