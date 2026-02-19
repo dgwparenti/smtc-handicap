@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Fit the multi-season Bayesian handicap model for TOP start position."""
+"""Fit the multi-season Bayesian handicap model for a given start position."""
 
 import argparse
 import time
@@ -13,7 +13,14 @@ PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Fit the Bayesian handicap model for TOP start position"
+        description="Fit the Bayesian handicap model for a given start position"
+    )
+    parser.add_argument(
+        "--position",
+        type=str,
+        choices=["TOP", "JUNCTION"],
+        required=True,
+        help="Start position to fit (TOP or JUNCTION)",
     )
     parser.add_argument(
         "--db",
@@ -36,12 +43,14 @@ def main() -> None:
     )
     args = parser.parse_args()
 
+    position = args.position
+
     # Preview data dimensions before fitting
     print("=" * 60)
-    print("CRESTA RUN HANDICAP MODEL — TOP")
+    print(f"CRESTA RUN HANDICAP MODEL — {position}")
     print("=" * 60)
 
-    stan_data = build_stan_data(args.db, "TOP")
+    stan_data = build_stan_data(args.db, position)
     print(f"\nData summary:")
     print(f"  Observations (N): {stan_data['N']:,}")
     print(f"  Riders (J):       {stan_data['J']:,}")
@@ -60,7 +69,7 @@ def main() -> None:
     t0 = time.time()
     result = run_model(
         args.db,
-        "TOP",
+        position,
         chains=args.chains,
         iter_warmup=args.iter_warmup,
         iter_sampling=args.iter_sampling,
@@ -91,7 +100,7 @@ def main() -> None:
     overall = "ALL PASSED" if diag["passed"] else "SOME CHECKS FAILED"
     print(f"Overall: {overall}")
 
-    nc_path = args.output_dir / "top.nc"
+    nc_path = args.output_dir / f"{position.lower()}.nc"
     print(f"\nInferenceData saved to: {nc_path}")
     print(f"Fitting time: {elapsed:.0f}s ({elapsed / 60:.1f} min)")
 
