@@ -30,7 +30,7 @@ RE_SECOND_DAY = re.compile(r"SECOND\s+DAY", re.IGNORECASE)
 RE_NATIONALITY = re.compile(r"^[A-Z]{1,3}$")
 RE_RANK = re.compile(r"^=?\d+$")
 RE_RACE_HEADER = re.compile(
-    r"^(?:THE\s+)?([A-Z][A-Z\s'\-]+?"
+    r"^(?:THE\s+)?(COPPA[A-Za-z\s'\u2019\-]+|[A-Z][A-Z\s'\u2019\-]+?"
     r"(?:CUP|TROPHY|PLATE|PRIZE|CHALLENGE(?:\s+CUP)?|SHIELD|RACE|CHAMPIONSHIP"
     r"|SPOON|AWARD))",
     re.IGNORECASE,
@@ -494,15 +494,22 @@ def parse_race_section(
 
     # Find the column header line to know where data starts
     data_start = 0
+    expected_runs = 3  # default
     for li, line in enumerate(section.lines):
-        if RE_HCAP_HEADER.search(line):
-            data_start = li + 1
-            break
-        if re.search(r"\b1st\b|\bFirst\s+Day\b", line, re.IGNORECASE):
+        if RE_HCAP_HEADER.search(line) or re.search(
+            r"\b1st\b|\bFirst\s+Day\b", line, re.IGNORECASE
+        ):
+            # Count ordinal columns (1st, 2nd, 3rd) to determine expected runs
+            ordinals = re.findall(r"\b\d+(?:st|nd|rd|th)\b", line, re.IGNORECASE)
+            if ordinals:
+                expected_runs = len(ordinals)
             data_start = li + 1
             break
 
     for line in section.lines[data_start:]:
+        # Skip "Riding but not Racing" riders (lines prefixed with **)
+        if line.lstrip().startswith("**"):
+            continue
         # Skip metadata lines
         if any(
             kw in line
@@ -623,8 +630,8 @@ def parse_race_section(
         all_times = time_tokens_raw[first_day_offset:]
 
         # Strip trailing totals (Total / Net Total)
-        # Ranked rows with 3 runs have: time time time Total [NetTotal]
-        actual_times = _strip_trailing_totals(all_times, is_handicap)
+        # Ranked rows with N runs have: time*N Total [NetTotal]
+        actual_times = _strip_trailing_totals(all_times, is_handicap, expected_runs)
 
         if rider_id not in seen_riders:
             riders.append(
@@ -664,23 +671,25 @@ def parse_race_section(
     return race, riders, records
 
 
-def _strip_trailing_totals(times: list[str], is_handicap: bool) -> list[str]:
+def _strip_trailing_totals(
+    times: list[str], is_handicap: bool, expected_runs: int = 3
+) -> list[str]:
     """Remove trailing Total/Net Total columns from time list.
 
-    For complete ranked rows: 3 run times + Total + (Net Total if handicap)
-    For incomplete/DNF rows: fewer times, no totals to strip
+    For complete ranked rows: N run times + Total + (Net Total if handicap)
+    For incomplete/DNF rows: fewer times, no totals to strip.
+
+    ``expected_runs`` is the number of actual run columns (e.g. 2 for Coppa,
+    3 for most races).
     """
     # Count actual time/fall values
     valid = [t for t in times if _is_time_or_fall(t)]
     if not valid:
         return times
 
-    # If handicap and >= 5 values: strip last 2 (Total + NetTotal)
-    if is_handicap and len(valid) >= 5:
-        return times[:-2]
-    # If non-handicap and >= 4 values: strip last 1 (Total or GrandTotal)
-    if not is_handicap and len(valid) >= 4:
-        return times[:-1]
+    excess = len(valid) - expected_runs
+    if excess > 0:
+        return times[:-excess]
 
     return times
 
