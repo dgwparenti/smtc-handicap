@@ -144,6 +144,11 @@ def build_rows(df: pd.DataFrame, model: dict, season_num_val: float) -> list[dic
             }
         riders[rid]["runs"].append(row)
 
+    # Filter: only keep riders that exist in the model
+    riders = {
+        rid: rdata for rid, rdata in riders.items() if model_rider_id(rid) in model["rider_map"]
+    }
+
     # Categorize riders
     ranked = []  # 2 completed runs, has handicap
     unranked_2run = []  # 2 completed runs, no handicap (boinville)
@@ -269,6 +274,14 @@ def main() -> None:
     bayes_count = sum(1 for r in rows if r["bayesian_handicap"] != "")
     print(f"  {ranked_count} ranked, {len(rows) - ranked_count} unranked")
     print(f"  {bayes_count} with Bayesian handicap, {len(rows) - bayes_count} without")
+
+    # Tightness: range of Bayesian net times for completed riders
+    bayes_nets = [float(r["bayesian_net"]) for r in rows if r["bayesian_net"] != ""]
+    if len(bayes_nets) >= 2:
+        tightness = max(bayes_nets) - min(bayes_nets)
+        print(f"\nTightness (range of Bayesian net times): {tightness:.2f}s")
+        print(f"  Fastest net: {min(bayes_nets):.2f}s, Slowest net: {max(bayes_nets):.2f}s")
+        print(f"  Riders with Bayesian net: {len(bayes_nets)}")
 
     # Show top 5
     print("\nTop 5:")

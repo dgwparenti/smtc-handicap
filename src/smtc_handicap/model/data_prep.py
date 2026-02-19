@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 
-def build_stan_data(db_path: str | Path, start_position: str, *, min_runs: int = 3) -> dict:
+def build_stan_data(db_path: str | Path, start_position: str, *, min_runs: int = 50) -> dict:
     """Query the DB and build the dict expected by the Stan model.
 
     Parameters
