@@ -214,15 +214,15 @@ def calculate_handicaps(
     # Shift predicted times to each rider's competitive quantile (p=0.10),
     # using posterior mean of per-rider sigma (not per-draw, to reduce noise).
     # Cap the maximum shift to prevent over-adjustment for very volatile riders.
-    _PHI_INV_P = -1.4051  # scipy.stats.norm.ppf(0.08)
-    _MAX_SHIFT = -2.5  # Cap: no more than 2.5s quantile adjustment
+    phi_inv_p = -1.4051  # scipy.stats.norm.ppf(0.08)
+    max_shift = -2.5  # Cap: no more than 2.5s quantile adjustment
 
     if posterior.get("sigma_rider") is not None:
         # Use posterior mean of sigma_rider for stable quantile shift
         sigma_mean = posterior["sigma_rider"].mean(axis=0)  # (J,)
         sigma_arr = np.array([sigma_mean[info["idx"]] for info in riders_info])
-        raw_shift = sigma_arr * _PHI_INV_P  # negative values
-        capped_shift = np.maximum(raw_shift, _MAX_SHIFT)  # cap magnitude
+        raw_shift = sigma_arr * phi_inv_p  # negative values
+        capped_shift = np.maximum(raw_shift, max_shift)  # cap magnitude
         pred_q = pred_times + capped_shift[np.newaxis, :]
     else:
         # Post-hoc fallback: use residual SD for consistency adjustment
@@ -232,8 +232,8 @@ def calculate_handicaps(
                 for info in riders_info
             ]
         )
-        raw_shift = consistency_arr * _PHI_INV_P
-        capped_shift = np.maximum(raw_shift, _MAX_SHIFT)
+        raw_shift = consistency_arr * phi_inv_p
+        capped_shift = np.maximum(raw_shift, max_shift)
         pred_q = pred_times + capped_shift[np.newaxis, :]
 
     # Fix scratch rider across all draws to avoid switching noise.
