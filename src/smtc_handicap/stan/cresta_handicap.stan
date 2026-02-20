@@ -1,15 +1,14 @@
 // =============================================================================
-// Cresta Run Handicap Model (Multi-Season)
+// Cresta Run Handicap Model (Multi-Season, Heteroscedastic)
 // Hierarchical Bayesian model for predicting rider finish times.
 //
 // Separate models are fitted for TOP and JUNCTION start positions.
-// Uses a single shared observation noise sigma_obs rather than per-rider
-// sigma_rider to keep the parameter space tractable with sparse data.
-// Per-rider consistency is computed post-hoc from residuals.
+// Uses per-rider observation noise sigma_rider[J] (log-normal hierarchy)
+// instead of a single shared sigma_obs. This captures that some riders
+// are more consistent than others, enabling quantile-based handicaps
+// that penalize volatile riders.
 //
 // Season effects: global eta[S] + per-rider linear trend beta_trend[J].
-// This replaces the dense delta[S,J] matrix with a parsimonious design
-// that scales to many seasons without exploding parameter count.
 // =============================================================================
 
 data {
@@ -44,8 +43,10 @@ parameters {
   // --- Rider level (non-centered parameterization for efficiency) ---
   vector[J] alpha_raw;                      // Standardized rider abilities
 
-  // --- Shared observation noise ---
-  real<lower=0> sigma_obs;                  // Shared run-to-run variability
+  // --- Per-rider observation noise (log-normal hierarchy) ---
+  real mu_log_sigma;                        // Population center for log(sigma_rider)
+  real<lower=0> sigma_log_sigma;            // Spread in log(sigma_rider) across riders
+  vector[J] log_sigma_raw;                  // Standardized per-rider log-sigmas
 
   // --- Season effects (global, non-centered) ---
   real<lower=0> sigma_season;               // How much seasons vary (ice/weather)
@@ -55,6 +56,9 @@ parameters {
   real beta_trend_mu;                       // Population mean trend (improvement/decline)
   real<lower=0> sigma_trend;                // Between-rider trend spread
   vector[J] beta_trend_raw;                 // Standardized per-rider trends
+
+  // --- Global quadratic season curvature ---
+  real beta_quad;                            // Quadratic term for population trend
 
   // --- Race-type effect (non-centered) ---
   real<lower=0> sigma_race;                 // How much race types vary
@@ -77,12 +81,18 @@ transformed parameters {
   // Race-type effects
   vector[R] gamma = sigma_race * gamma_raw;
 
+  // Per-rider observation noise (log-normal, non-centered)
+  vector<lower=0>[J] sigma_rider;
+  for (j in 1:J)
+    sigma_rider[j] = exp(mu_log_sigma + sigma_log_sigma * log_sigma_raw[j]);
+
   // Expected time for each observation
   vector[N] mu;
   for (n in 1:N) {
     mu[n] = alpha[rider[n]]
             + eta[season[n]]
             + beta_trend[rider[n]] * season_num[season[n]]
+            + beta_quad * square(season_num[season[n]])
             + gamma[race_type[n]];
 
     // SL improvement trend (only active for SL riders)
@@ -98,16 +108,23 @@ model {
   sigma_pop ~ normal(0, 5);       // half-normal via constraint
   sigma_season ~ normal(0, 3);
   sigma_race ~ normal(0, 2);
-  sigma_trend ~ normal(0, 1);
+  sigma_trend ~ normal(0, 0.5);   // tighter prior to reduce trend extrapolation errors
 
-  // --- Observation noise ---
-  sigma_obs ~ normal(0, 5);       // half-normal via constraint
+  // --- Per-rider sigma hyperpriors ---
+  mu_log_sigma ~ normal(log(2.0), 0.5);    // population center ~2s
+  sigma_log_sigma ~ normal(0, 0.5);         // spread in consistency
 
   // --- Trend population mean ---
   beta_trend_mu ~ normal(0, 1);   // expect ~0 mean population trend
 
+  // --- Global quadratic curvature ---
+  beta_quad ~ normal(0, 0.5);     // weakly informative, expect small
+
   // --- Rider level ---
   alpha_raw ~ std_normal();        // implies alpha ~ N(mu_pop, sigma_pop)
+
+  // --- Per-rider sigma ---
+  log_sigma_raw ~ std_normal();    // implies log(sigma_rider) ~ N(mu_log_sigma, sigma_log_sigma)
 
   // --- Season effects ---
   eta_raw ~ std_normal();          // implies eta ~ N(0, sigma_season)
@@ -121,18 +138,26 @@ model {
   // --- SL improvement ---
   beta_improve ~ normal(-0.3, 0.3);
 
-  // --- Likelihood ---
-  y ~ normal(mu, sigma_obs);
+  // --- Likelihood (Normal, per-rider noise) ---
+  {
+    vector[N] sigma_vec;
+    for (n in 1:N)
+      sigma_vec[n] = sigma_rider[rider[n]];
+    y ~ normal(mu, sigma_vec);
+  }
 }
 
 generated quantities {
-  // Posterior predictive checks: simulate new data from the model
+  // Backward-compatible sigma_obs: population center of sigma_rider
+  real sigma_obs = exp(mu_log_sigma);
+
+  // Posterior predictive checks
   vector[N] y_rep;
   for (n in 1:N)
-    y_rep[n] = normal_rng(mu[n], sigma_obs);
+    y_rep[n] = normal_rng(mu[n], sigma_rider[rider[n]]);
 
   // Log-likelihood for LOO-CV model comparison
   vector[N] log_lik;
   for (n in 1:N)
-    log_lik[n] = normal_lpdf(y[n] | mu[n], sigma_obs);
+    log_lik[n] = normal_lpdf(y[n] | mu[n], sigma_rider[rider[n]]);
 }
