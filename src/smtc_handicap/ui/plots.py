@@ -245,10 +245,13 @@ def plot_rider_vs_field(
 
     fig = go.Figure()
 
-    # Field distribution
+    normalized_hover = "<b>%{x:.1f}s</b><extra></extra>"
+
+    # Field distribution (peak-normalized)
     field_curve = _smoothed_histogram(field_summary.all_times)
     if field_curve is not None:
         x_f, y_f = field_curve
+        y_f = y_f / y_f.max()
         fig.add_trace(
             go.Scatter(
                 x=x_f,
@@ -261,15 +264,16 @@ def plot_rider_vs_field(
                     f"All riders ({field_summary.n_riders} riders,"
                     f" {len(field_summary.all_times)} runs)"
                 ),
-                hovertemplate=_distribution_hovertemplate(),
+                hovertemplate=normalized_hover,
             )
         )
 
-    # Rider distribution (overlaid)
+    # Rider distribution (peak-normalized, overlaid)
     if rider_summary.all_times:
         rider_curve = _smoothed_histogram(rider_summary.all_times)
         if rider_curve is not None:
             x_r, y_r = rider_curve
+            y_r = y_r / y_r.max()
             fig.add_trace(
                 go.Scatter(
                     x=x_r,
@@ -279,7 +283,7 @@ def plot_rider_vs_field(
                     fillcolor="rgba(31,119,180,0.35)",
                     line=dict(color=BLUE, width=2),
                     name=f"{rider_summary.display_name} ({len(rider_summary.all_times)} runs)",
-                    hovertemplate=_distribution_hovertemplate(),
+                    hovertemplate=normalized_hover,
                 )
             )
         else:
@@ -310,7 +314,9 @@ def plot_rider_vs_field(
             f"Field median: {field_summary.median_time:.1f}s",
         )
 
-    fig.update_layout(**_base_layout(title))
+    layout = _base_layout(title)
+    layout["yaxis"]["title"] = dict(text="Relative Density", font=dict(size=12, color=AXIS_COLOR))
+    fig.update_layout(**layout)
     return fig
 
 

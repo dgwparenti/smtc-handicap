@@ -26,7 +26,10 @@ from smtc_handicap.ui.queries import (
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent.parent
 DB_PATH = PROJECT_ROOT / "data" / "cresta.db"
-NC_PATH = PROJECT_ROOT / "data" / "model_fits" / "top.nc"
+MODEL_PATHS: dict[str, Path] = {
+    "TOP": PROJECT_ROOT / "data" / "model_fits" / "top.nc",
+    "JUNCTION": PROJECT_ROOT / "data" / "model_fits" / "junction.nc",
+}
 
 st.set_page_config(
     page_title="Cresta Run — Handicap Explorer",
@@ -97,11 +100,13 @@ def _inject_custom_css() -> None:
         [data-testid="stMetric"] label {
             color: #6B7280 !important;
             font-weight: 500;
+            font-size: 0.8rem !important;
         }
 
         [data-testid="stMetric"] [data-testid="stMetricValue"] {
             color: #2C3E6B !important;
             font-weight: 600;
+            font-size: 1.3rem !important;
         }
 
         /* Captions */
@@ -141,10 +146,14 @@ def load_db() -> CrestaDB:
 
 
 @st.cache_resource
-def load_model(_db: CrestaDB) -> BayesianModel | None:
-    if NC_PATH.exists():
-        return BayesianModel(NC_PATH, _db)
-    return None
+def load_models(_db: CrestaDB) -> dict[str, BayesianModel | None]:
+    models: dict[str, BayesianModel | None] = {}
+    for position, path in MODEL_PATHS.items():
+        if path.exists():
+            models[position] = BayesianModel(path, _db, position)
+        else:
+            models[position] = None
+    return models
 
 
 @st.cache_data
@@ -159,7 +168,7 @@ def cached_rider_options(_db: CrestaDB) -> list[tuple[str, str]]:
 
 def main() -> None:
     db = load_db()
-    model = load_model(db)
+    models = load_models(db)
 
     seasons = cached_seasons(db)
     rider_options = cached_rider_options(db)
@@ -179,11 +188,12 @@ def main() -> None:
     with st.sidebar:
         st.title("Handicap Explorer")
 
-        season_labels = [s[1] for s in seasons]
+        all_seasons: list[tuple[int | None, str]] = [(None, "All seasons")] + seasons
+        all_season_labels = [s[1] for s in all_seasons]
         season_idx = st.selectbox(
-            "Season", range(len(seasons)), format_func=lambda i: season_labels[i]
+            "Season", range(len(all_seasons)), format_func=lambda i: all_season_labels[i]
         )
-        season_year = seasons[season_idx][0]
+        season_year = all_seasons[season_idx][0]
 
         rider_idx = st.selectbox(
             "Rider",
@@ -219,6 +229,7 @@ def main() -> None:
         col_top, col_jct = st.columns(2, gap="medium")
 
         for position, col in [("TOP", col_top), ("JUNCTION", col_jct)]:
+            model = models.get(position)
             summary = get_rider_time_summary(db, selected_rider_id, position, season_year, model)
             fig = plot_rider_performance(summary)
             with col:
@@ -231,7 +242,7 @@ def main() -> None:
                 )
                 mc2.metric(
                     f"Season runs ({position})",
-                    f"{len(summary.season_times)} ({seasons[season_idx][1]})",
+                    f"{len(summary.season_times)} ({all_seasons[season_idx][1]})",
                     help=f"Number of {position} runs in the selected season",
                 )
 
@@ -243,6 +254,7 @@ def main() -> None:
         col_top2, col_jct2 = st.columns(2, gap="medium")
 
         for position, col in [("TOP", col_top2), ("JUNCTION", col_jct2)]:
+            model = models.get(position)
             rider_summary = get_rider_time_summary(
                 db, selected_rider_id, position, season_year, model
             )
@@ -283,6 +295,7 @@ def main() -> None:
         col_top3, col_jct3 = st.columns(2, gap="medium")
 
         for position, col in [("TOP", col_top3), ("JUNCTION", col_jct3)]:
+            model = models.get(position)
             comparison = get_handicap_comparison(
                 db,
                 scratch_rider_id,

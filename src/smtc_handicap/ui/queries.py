@@ -88,7 +88,7 @@ class HandicapComparison:
 class BayesianModel:
     """Wrapper around the fitted Stan model (NetCDF inference data)."""
 
-    def __init__(self, nc_path: str | Path, db: CrestaDB) -> None:
+    def __init__(self, nc_path: str | Path, db: CrestaDB, position: str = "TOP") -> None:
         import arviz as az
 
         idata = az.from_netcdf(str(nc_path))
@@ -99,12 +99,12 @@ class BayesianModel:
         self.beta_trend_mean: np.ndarray = (
             idata.posterior["beta_trend"].mean(dim=["chain", "draw"]).values
         )
-        self.season_lookup = self._build_season_lookup(db)
+        self.season_lookup = self._build_season_lookup(db, position)
 
-    def _build_season_lookup(self, db: CrestaDB) -> dict[int, float]:
+    def _build_season_lookup(self, db: CrestaDB, position: str) -> dict[int, float]:
         """Map season_year -> centered season_num value."""
         max_date = db.conn.execute(
-            "SELECT MAX(date) FROM races WHERE start_position = 'TOP'"
+            "SELECT MAX(date) FROM races WHERE start_position = ?", (position,)
         ).fetchone()[0]
         if max_date is None:
             return {}
@@ -217,7 +217,7 @@ def get_rider_time_summary(
     db: CrestaDB,
     rider_id: str,
     position: str,
-    season_year: int,
+    season_year: int | None,
     model: BayesianModel | None = None,
 ) -> RiderTimeSummary:
     """Build a RiderTimeSummary for a rider on a given position/season."""
@@ -272,7 +272,7 @@ def get_handicap_comparison(
     scratch_id: str,
     compared_id: str,
     position: str,
-    season_year: int,
+    season_year: int | None,
     model: BayesianModel | None = None,
 ) -> HandicapComparison:
     """Compute handicap between a compared rider and a scratch rider."""
