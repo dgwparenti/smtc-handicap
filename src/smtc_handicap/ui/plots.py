@@ -91,12 +91,12 @@ def _base_layout(title: str) -> dict:
             tickfont=dict(size=11, color=AXIS_COLOR),
         ),
         legend=dict(
-            orientation="h",
-            x=0.5,
-            y=-0.12,
-            xanchor="center",
+            orientation="v",
+            x=0.98,
+            y=0.98,
+            xanchor="right",
             yanchor="top",
-            bgcolor="rgba(255,255,255,0.95)",
+            bgcolor="rgba(255,255,255,0.9)",
             bordercolor="rgba(0,0,0,0.08)",
             borderwidth=1,
             font=dict(size=10, family=FONT_FAMILY),
@@ -130,8 +130,16 @@ def _empty_figure(message: str, title: str) -> go.Figure:
     return fig
 
 
-def _add_vline(fig: go.Figure, x: float, color: str, dash: str | None, label: str) -> None:
-    """Add a vertical reference line with a legend entry."""
+def _add_vline(
+    fig: go.Figure,
+    x: float,
+    color: str,
+    dash: str | None,
+    label: str,
+    annotate: bool = True,
+) -> None:
+    """Add a vertical reference line with an optional text annotation."""
+    # Dummy trace to ensure x-axis auto-range includes this value
     fig.add_trace(
         go.Scatter(
             x=[x, x],
@@ -148,6 +156,20 @@ def _add_vline(fig: go.Figure, x: float, color: str, dash: str | None, label: st
         line=dict(color=color, width=2, dash=dash or "solid"),
         opacity=0.8,
     )
+    if annotate:
+        fig.add_annotation(
+            x=x,
+            y=1.0,
+            xref="x",
+            yref="paper",
+            text=f"<b>{label}</b>",
+            showarrow=False,
+            font=dict(size=9, color=color, family=FONT_FAMILY),
+            textangle=-90,
+            xanchor="left",
+            yanchor="top",
+            bgcolor="rgba(255,255,255,0.7)",
+        )
 
 
 def _distribution_hovertemplate() -> str:
@@ -391,14 +413,26 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
                 )
             )
 
-    # Estimated time vertical lines
+    # Estimated time vertical lines (no annotations — handicap annotation covers these)
     if scratch.estimated_time is not None:
         _add_vline(
-            fig, scratch.estimated_time, ORANGE, None, f"Est: {scratch.estimated_time:.1f}s"
+            fig,
+            scratch.estimated_time,
+            ORANGE,
+            None,
+            f"Est: {scratch.estimated_time:.1f}s",
+            annotate=False,
         )
 
     if rider.estimated_time is not None:
-        _add_vline(fig, rider.estimated_time, BLUE, None, f"Est: {rider.estimated_time:.1f}s")
+        _add_vline(
+            fig,
+            rider.estimated_time,
+            BLUE,
+            None,
+            f"Est: {rider.estimated_time:.1f}s",
+            annotate=False,
+        )
 
     # Handicap annotation arrow
     if (
