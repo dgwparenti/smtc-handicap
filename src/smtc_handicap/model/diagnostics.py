@@ -59,6 +59,7 @@ def check_diagnostics(fit: CmdStanMCMC, stan_data: dict | None = None) -> dict:
         "beta_trend_mu",
         "sigma_trend",
         "beta_improve",
+        "nu",
     ]
     summary = az.summary(idata, var_names=key_params)
 

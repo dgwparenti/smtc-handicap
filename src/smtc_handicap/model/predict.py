@@ -48,6 +48,9 @@ def _extract_from_cmdstanmcmc(fit: CmdStanMCMC) -> dict[str, np.ndarray]:
     # Global quadratic season curvature (may not exist in older models)
     beta_quad = draws["beta_quad"].values if "beta_quad" in draws.columns else None  # (D,)
 
+    # Student-t degrees of freedom (may not exist in Normal-only models)
+    nu = draws["nu"].values if "nu" in draws.columns else None  # (D,)
+
     # Per-rider sigma (heteroscedastic model)
     sigma_rider_cols = sorted(
         [c for c in draws.columns if c.startswith("sigma_rider[")],
@@ -66,6 +69,7 @@ def _extract_from_cmdstanmcmc(fit: CmdStanMCMC) -> dict[str, np.ndarray]:
         "beta_quad": beta_quad,
         "sigma_obs": sigma_obs,
         "sigma_rider": sigma_rider,
+        "nu": nu,
     }
 
 
@@ -90,6 +94,7 @@ def _extract_from_inferencedata(idata: az.InferenceData) -> dict[str, np.ndarray
         "beta_quad": _extract_var(post, "beta_quad"),  # (D,) or None
         "sigma_obs": _extract_var(post, "sigma_obs"),  # (D,)
         "sigma_rider": _extract_var(post, "sigma_rider"),  # (D, J) or None
+        "nu": _extract_var(post, "nu"),  # (D,) or None
     }
 
 
@@ -109,6 +114,7 @@ def get_posterior_samples(fit: CmdStanMCMC | az.InferenceData) -> dict[str, np.n
       - beta_quad: (D,) or None
       - sigma_obs: (D,)
       - sigma_rider: (D, J) or None (if per-rider sigma model)
+      - nu: (D,) or None (if Student-t model)
     """
     # Duck-type: InferenceData has a .posterior attribute
     if hasattr(fit, "posterior"):
