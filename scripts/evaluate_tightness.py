@@ -67,8 +67,14 @@ def main() -> None:
     parser.add_argument(
         "--handicap-scale",
         type=float,
-        default=1.0,
-        help="Scale factor for handicap differences (< 1.0 compresses, > 1.0 amplifies)",
+        default=None,
+        help="Scale factor for handicap differences (default: 1.175)",
+    )
+    parser.add_argument(
+        "--handicap-power",
+        type=float,
+        default=None,
+        help="Power-law exponent for concave compression (default: 0.84, <1 compresses large handicaps)",
     )
     args = parser.parse_args()
 
@@ -103,9 +109,10 @@ def main() -> None:
 
     print("\n[3/3] Evaluating tightness...")
     print(
-        f"  Post-processing: phi_inv_p={args.phi_inv_p or -1.55}, "
+        f"  Post-processing: phi_inv_p={args.phi_inv_p or -1.30}, "
         f"max_shift={args.max_shift or -2.5}, aggregation={args.aggregation}, "
-        f"handicap_scale={args.handicap_scale}"
+        f"handicap_scale={args.handicap_scale or 1.175}, "
+        f"handicap_power={args.handicap_power or 0.84}"
     )
     print(f"  Records with committee handicap: {len(handicap_df)}")
 
@@ -143,7 +150,8 @@ def main() -> None:
             max_shift=args.max_shift,
             aggregation=args.aggregation,
             sigma_shrinkage=args.sigma_shrinkage,
-            handicap_scale=args.handicap_scale,
+            handicap_scale=args.handicap_scale if args.handicap_scale is not None else 1.175,
+            handicap_power=args.handicap_power if args.handicap_power is not None else 0.84,
         )
 
         if len(hcap_df) < MIN_RIDERS_PER_RACE:

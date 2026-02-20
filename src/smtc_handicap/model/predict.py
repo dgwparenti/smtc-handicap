@@ -207,6 +207,7 @@ def calculate_handicaps(
     aggregation: str = "median",
     sigma_shrinkage: float = 1.0,
     handicap_scale: float = 1.0,
+    handicap_power: float = 1.0,
 ) -> pd.DataFrame:
     """Compute handicaps for a field of riders in a given race type.
 
@@ -220,12 +221,15 @@ def calculate_handicaps(
     scratch_rider_id : if provided, use this rider as scratch (handicap=0).
         Falls back to auto-detection (fastest predicted) if the rider
         is not in the field.
-    phi_inv_p : quantile shift multiplier (default: -1.4051)
+    phi_inv_p : quantile shift multiplier (default: -1.30)
     max_shift : cap on quantile shift magnitude (default: -2.5)
     aggregation : "median" or "mean" for handicap summarization (default: "median")
     sigma_shrinkage : how much to use per-rider sigma vs population sigma_obs
         for the quantile shift. 1.0 = fully per-rider (default), 0.0 = uniform
         population sigma. Values in between shrink toward the population mean.
+    handicap_scale : linear scale factor for handicap differences (default: 1.175)
+    handicap_power : power-law exponent for concave compression of handicaps
+        (default: 0.84). Values < 1.0 compress large handicaps more than small.
 
     Returns
     -------
@@ -299,7 +303,7 @@ def calculate_handicaps(
     # Cap the maximum shift to prevent over-adjustment for very volatile riders.
     # === TUNABLE PARAMETERS (Ralph Loop optimizes these) ===
     if phi_inv_p is None:
-        phi_inv_p = -1.55  # Optimized via Ralph Loop grid search
+        phi_inv_p = -1.30  # Optimized via Ralph Loop grid search
     if max_shift is None:
         max_shift = -2.5  # Cap on quantile shift (more negative = less capping)
     # === END TUNABLE PARAMETERS ===
@@ -340,8 +344,11 @@ def calculate_handicaps(
         scratch_idx = int(np.argmin(mean_pred_q))
     scratch_q = pred_q[:, scratch_idx : scratch_idx + 1]  # (D, 1)
     handicaps = pred_q - scratch_q  # (D, n_field)
-    if handicap_scale != 1.0:
-        handicaps *= handicap_scale
+    # Power-law compression: sign(h) * scale * |h|^power
+    # Concave (power < 1) compresses large handicaps more than small ones.
+    if handicap_power != 1.0 or handicap_scale != 1.0:
+        abs_h = np.abs(handicaps)
+        handicaps = np.sign(handicaps) * handicap_scale * np.power(abs_h, handicap_power)
     handicaps[:, scratch_idx] = 0.0  # exact zero for scratch rider
 
     # Summaries
