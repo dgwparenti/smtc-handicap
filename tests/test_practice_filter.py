@@ -4,7 +4,6 @@ import pytest
 
 from smtc_handicap.pipeline import is_practice_only_file
 
-
 # -- Practice-only files (should return True) --
 
 
