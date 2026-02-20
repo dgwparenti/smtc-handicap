@@ -15,7 +15,6 @@ import argparse
 import time
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 
 from smtc_handicap.model.data_prep import build_stan_data
@@ -35,6 +34,24 @@ def main() -> None:
         type=Path,
         metavar="PATH",
         help="Load a pre-fitted model from ArviZ NetCDF instead of re-fitting",
+    )
+    parser.add_argument(
+        "--phi-inv-p",
+        type=float,
+        default=None,
+        help="Quantile shift multiplier (default: -1.4051)",
+    )
+    parser.add_argument(
+        "--max-shift",
+        type=float,
+        default=None,
+        help="Cap on quantile shift magnitude (default: -2.5)",
+    )
+    parser.add_argument(
+        "--aggregation",
+        choices=["median", "mean"],
+        default="median",
+        help="Handicap aggregation method (default: median)",
     )
     args = parser.parse_args()
 
@@ -67,7 +84,11 @@ def main() -> None:
     meta_df = stan_data["meta_df"]
     handicap_df = meta_df[meta_df["handicap"].notna()].copy()
 
-    print(f"\n[3/3] Evaluating tightness...")
+    print("\n[3/3] Evaluating tightness...")
+    print(
+        f"  Post-processing: phi_inv_p={args.phi_inv_p or -1.4051}, "
+        f"max_shift={args.max_shift or -2.5}, aggregation={args.aggregation}"
+    )
     print(f"  Records with committee handicap: {len(handicap_df)}")
 
     race_groups = handicap_df.groupby("race_id")
@@ -98,6 +119,9 @@ def main() -> None:
             race_type_idx,
             season_idx,
             scratch_rider_id=scratch_rider_id,
+            phi_inv_p=args.phi_inv_p,
+            max_shift=args.max_shift,
+            aggregation=args.aggregation,
         )
 
         if len(hcap_df) < MIN_RIDERS_PER_RACE:

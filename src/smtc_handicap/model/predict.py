@@ -179,6 +179,10 @@ def calculate_handicaps(
     race_type_idx: int,
     season_idx: int = 1,
     scratch_rider_id: str | None = None,
+    *,
+    phi_inv_p: float | None = None,
+    max_shift: float | None = None,
+    aggregation: str = "median",
 ) -> pd.DataFrame:
     """Compute handicaps for a field of riders in a given race type.
 
@@ -192,6 +196,9 @@ def calculate_handicaps(
     scratch_rider_id : if provided, use this rider as scratch (handicap=0).
         Falls back to auto-detection (fastest predicted) if the rider
         is not in the field.
+    phi_inv_p : quantile shift multiplier (default: -1.4051)
+    max_shift : cap on quantile shift magnitude (default: -2.5)
+    aggregation : "median" or "mean" for handicap summarization (default: "median")
 
     Returns
     -------
@@ -258,8 +265,10 @@ def calculate_handicaps(
     # using posterior mean of per-rider sigma (not per-draw, to reduce noise).
     # Cap the maximum shift to prevent over-adjustment for very volatile riders.
     # === TUNABLE PARAMETERS (Ralph Loop optimizes these) ===
-    phi_inv_p = -0.25  # scipy.stats.norm.ppf(~0.40) — lower = more aggressive
-    max_shift = -1.5  # Cap on quantile shift (more negative = less capping)
+    if phi_inv_p is None:
+        phi_inv_p = -1.4051  # scipy.stats.norm.ppf(0.08) — proven optimal
+    if max_shift is None:
+        max_shift = -2.5  # Cap on quantile shift (more negative = less capping)
     # === END TUNABLE PARAMETERS ===
 
     if posterior.get("sigma_rider") is not None:
@@ -300,7 +309,9 @@ def calculate_handicaps(
     results = []
     for i, info in enumerate(riders_info):
         # Mean for handicap estimate (responsive to full posterior)
-        h_mean = float(np.mean(handicaps[:, i]))
+        h_mean = float(
+            np.median(handicaps[:, i]) if aggregation == "median" else np.mean(handicaps[:, i])
+        )
         h_lo = float(np.percentile(handicaps[:, i], 2.5))
         h_hi = float(np.percentile(handicaps[:, i], 97.5))
         exp_time = float(np.mean(pred_times[:, i]))
