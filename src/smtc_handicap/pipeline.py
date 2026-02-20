@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -210,5 +211,88 @@ def ingest_all(
                         total_stats.warnings.append(f"FATAL: {pf.name}: {e}")
             else:
                 logger.warning("No PDF files found in %s", pdf_dir)
+
+    return total_stats
+
+
+def is_practice_only_file(filename: str) -> bool:
+    """Return True if filename refers to a practice-only session (no races)."""
+    name_lower = filename.lower()
+    if "practice" in name_lower:
+        return True
+    # pt=practice top, pj=practice junction; exclude if rt/rj present (combined files)
+    has_practice = bool(re.search(r"(?<![a-zA-Z])p[tj](?![a-zA-Z])", name_lower))
+    has_race = bool(re.search(r"(?<![a-zA-Z])r[tj](?![a-zA-Z])", name_lower))
+    return has_practice and not has_race
+
+
+def ingest_new_practice(
+    json_dir: Path | None,
+    pdf_dir: Path | None,
+    db_path: Path,
+    *,
+    dry_run: bool = False,
+) -> IngestStats:
+    """Ingest only new practice-only files (JSONs first, then PDFs)."""
+    total_stats = IngestStats()
+
+    with CrestaDB(db_path) as db:
+        already_ingested = db.get_ingested_pdf_sources()
+
+        # Phase 1: JSONs
+        if json_dir is not None:
+            json_files = sorted(json_dir.glob("*.json"))
+            new_jsons = [
+                f
+                for f in json_files
+                if is_practice_only_file(f.name) and f.name not in already_ingested
+            ]
+            logger.info(
+                "JSONs: %d on disk, %d practice-only, %d new",
+                len(json_files),
+                sum(1 for f in json_files if is_practice_only_file(f.name)),
+                len(new_jsons),
+            )
+            if dry_run:
+                for f in new_jsons:
+                    logger.info("  [dry-run] would ingest %s", f.name)
+            else:
+                for i, jf in enumerate(new_jsons, 1):
+                    logger.info("[JSON %d/%d] Processing %s", i, len(new_jsons), jf.name)
+                    try:
+                        stats = ingest_single_json(db, jf)
+                        _accumulate_stats(total_stats, stats)
+                    except Exception as e:
+                        logger.error("Failed to process %s: %s", jf.name, e)
+                        total_stats.jsons_failed += 1
+                        total_stats.warnings.append(f"FATAL: {jf.name}: {e}")
+
+        # Phase 2: PDFs
+        if pdf_dir is not None:
+            pdf_files = sorted(pdf_dir.glob("*.pdf"))
+            new_pdfs = [
+                f
+                for f in pdf_files
+                if is_practice_only_file(f.name) and f.name not in already_ingested
+            ]
+            logger.info(
+                "PDFs: %d on disk, %d practice-only, %d new",
+                len(pdf_files),
+                sum(1 for f in pdf_files if is_practice_only_file(f.name)),
+                len(new_pdfs),
+            )
+            if dry_run:
+                for f in new_pdfs:
+                    logger.info("  [dry-run] would ingest %s", f.name)
+            else:
+                for i, pf in enumerate(new_pdfs, 1):
+                    logger.info("[PDF %d/%d] Processing %s", i, len(new_pdfs), pf.name)
+                    try:
+                        stats = ingest_single_pdf(db, pf)
+                        _accumulate_stats(total_stats, stats)
+                    except Exception as e:
+                        logger.error("Failed to process %s: %s", pf.name, e)
+                        total_stats.pdfs_failed += 1
+                        total_stats.warnings.append(f"FATAL: {pf.name}: {e}")
 
     return total_stats
