@@ -24,8 +24,15 @@ GREEN = "#2ca02c"
 RED = "#d62728"
 GREY = "#7f7f7f"
 
-CHART_HEIGHT = 350
-CHART_MARGIN = dict(l=50, r=20, t=40, b=50)
+# Typography & styling constants
+FONT_FAMILY = "Inter, Source Sans Pro, sans-serif"
+TITLE_COLOR = "#2C3E6B"
+AXIS_COLOR = "#4A5568"
+GRID_COLOR = "rgba(0,0,0,0.06)"
+AXIS_LINE_COLOR = "#CBD5E0"
+
+CHART_HEIGHT = 380
+CHART_MARGIN = dict(l=50, r=20, t=40, b=90)
 
 
 def _smoothed_histogram(times: list[float]) -> tuple[np.ndarray, np.ndarray] | None:
@@ -54,28 +61,50 @@ def _smoothed_histogram(times: list[float]) -> tuple[np.ndarray, np.ndarray] | N
 def _base_layout(title: str) -> dict:
     """Return common Plotly layout kwargs."""
     return dict(
-        title=dict(text=title, x=0.02, y=0.95, font=dict(size=16)),
+        title=dict(
+            text=title,
+            x=0.02,
+            y=0.95,
+            font=dict(size=16, color=TITLE_COLOR, family=FONT_FAMILY, weight="bold"),
+        ),
+        font=dict(family=FONT_FAMILY, color=AXIS_COLOR),
         height=CHART_HEIGHT,
         margin=CHART_MARGIN,
         plot_bgcolor="white",
+        paper_bgcolor="white",
         xaxis=dict(
-            title="Finish Time (seconds)",
+            title=dict(text="Finish Time (seconds)", font=dict(size=12, color=AXIS_COLOR)),
             showgrid=False,
             zeroline=False,
+            showline=True,
+            linecolor=AXIS_LINE_COLOR,
+            linewidth=1,
+            tickfont=dict(size=11, color=AXIS_COLOR),
         ),
         yaxis=dict(
-            title="Number of Runs",
+            title=dict(text="Number of Runs", font=dict(size=12, color=AXIS_COLOR)),
             showgrid=True,
-            gridcolor="lightgrey",
+            gridcolor=GRID_COLOR,
+            gridwidth=0.5,
             zeroline=False,
+            showline=False,
+            tickfont=dict(size=11, color=AXIS_COLOR),
         ),
         legend=dict(
-            x=0.98,
-            y=0.98,
-            xanchor="right",
+            orientation="h",
+            x=0.5,
+            y=-0.25,
+            xanchor="center",
             yanchor="top",
-            bgcolor="rgba(255,255,255,0.8)",
-            font=dict(size=11),
+            bgcolor="rgba(255,255,255,0.9)",
+            bordercolor="rgba(0,0,0,0.08)",
+            borderwidth=1,
+            font=dict(size=10, family=FONT_FAMILY),
+        ),
+        hoverlabel=dict(
+            bgcolor="white",
+            bordercolor="rgba(0,0,0,0.15)",
+            font=dict(size=12, family=FONT_FAMILY, color="#1A1A2E"),
         ),
     )
 
@@ -94,15 +123,24 @@ def _empty_figure(message: str, title: str) -> go.Figure:
             x=0.5,
             y=0.5,
             showarrow=False,
-            font=dict(size=14, color="grey"),
+            font=dict(size=14, color="grey", family=FONT_FAMILY),
         )
     ]
     fig.update_layout(**layout)
     return fig
 
 
-def _add_vline(fig: go.Figure, x: float, color: str, dash: str | None, label: str) -> None:
-    """Add a vertical reference line with a legend entry."""
+def _add_vline(
+    fig: go.Figure,
+    x: float,
+    color: str,
+    dash: str | None,
+    label: str,
+    annotate: bool = True,
+    annotation_y: float = 1.0,
+) -> None:
+    """Add a vertical reference line with an optional text annotation."""
+    # Dummy trace to ensure x-axis auto-range includes this value
     fig.add_trace(
         go.Scatter(
             x=[x, x],
@@ -110,10 +148,34 @@ def _add_vline(fig: go.Figure, x: float, color: str, dash: str | None, label: st
             mode="lines",
             line=dict(color=color, width=2, dash=dash),
             name=label,
-            showlegend=True,
+            showlegend=False,
+            hoverinfo="skip",
         )
     )
-    fig.add_vline(x=x, line=dict(color=color, width=2, dash=dash or "solid"))
+    fig.add_vline(
+        x=x,
+        line=dict(color=color, width=2, dash=dash or "solid"),
+        opacity=0.8,
+    )
+    if annotate:
+        fig.add_annotation(
+            x=x,
+            y=annotation_y,
+            xref="x",
+            yref="paper",
+            text=f"<b>{label}</b>",
+            showarrow=False,
+            font=dict(size=9, color=color, family=FONT_FAMILY),
+            textangle=-90,
+            xanchor="left",
+            yanchor="top",
+            bgcolor="rgba(255,255,255,0.7)",
+        )
+
+
+def _distribution_hovertemplate() -> str:
+    """Hover template for smoothed distribution curves."""
+    return "<b>%{x:.1f}s</b><br>~%{y:.0f} runs<extra></extra>"
 
 
 def plot_rider_performance(summary: RiderTimeSummary) -> go.Figure:
@@ -141,6 +203,7 @@ def plot_rider_performance(summary: RiderTimeSummary) -> go.Figure:
                 fillcolor="rgba(31,119,180,0.3)",
                 line=dict(color=BLUE, width=2),
                 name=f"All time ({len(summary.all_times)} runs)",
+                hovertemplate=_distribution_hovertemplate(),
             )
         )
     else:
@@ -166,6 +229,7 @@ def plot_rider_performance(summary: RiderTimeSummary) -> go.Figure:
                     mode="lines",
                     line=dict(color=BLUE, width=2, dash="dash"),
                     name=f"Season ({len(summary.season_times)} runs)",
+                    hovertemplate=_distribution_hovertemplate(),
                 )
             )
         else:
@@ -179,12 +243,30 @@ def plot_rider_performance(summary: RiderTimeSummary) -> go.Figure:
                 )
             )
 
-    # Best-ever line
-    if summary.best_ever is not None:
+    # Best-ever and season-best lines (handle overlap when equal)
+    if summary.best_ever is not None and summary.season_best is not None:
+        if abs(summary.best_ever - summary.season_best) < 0.05:
+            _add_vline(fig, summary.best_ever, GREEN, None, f"Best: {summary.best_ever:.1f}s")
+        else:
+            _add_vline(
+                fig,
+                summary.best_ever,
+                GREEN,
+                None,
+                f"Best ever: {summary.best_ever:.1f}s",
+                annotation_y=1.0,
+            )
+            _add_vline(
+                fig,
+                summary.season_best,
+                RED,
+                "dash",
+                f"Season best: {summary.season_best:.1f}s",
+                annotation_y=0.55,
+            )
+    elif summary.best_ever is not None:
         _add_vline(fig, summary.best_ever, GREEN, None, f"Best ever: {summary.best_ever:.1f}s")
-
-    # Season-best line
-    if summary.season_best is not None:
+    elif summary.season_best is not None:
         _add_vline(
             fig, summary.season_best, RED, "dash", f"Season best: {summary.season_best:.1f}s"
         )
@@ -205,10 +287,13 @@ def plot_rider_vs_field(
 
     fig = go.Figure()
 
-    # Field distribution
+    normalized_hover = "<b>%{x:.1f}s</b><extra></extra>"
+
+    # Field distribution (peak-normalized)
     field_curve = _smoothed_histogram(field_summary.all_times)
     if field_curve is not None:
         x_f, y_f = field_curve
+        y_f = y_f / y_f.max()
         fig.add_trace(
             go.Scatter(
                 x=x_f,
@@ -221,14 +306,16 @@ def plot_rider_vs_field(
                     f"All riders ({field_summary.n_riders} riders,"
                     f" {len(field_summary.all_times)} runs)"
                 ),
+                hovertemplate=normalized_hover,
             )
         )
 
-    # Rider distribution (overlaid)
+    # Rider distribution (peak-normalized, overlaid)
     if rider_summary.all_times:
         rider_curve = _smoothed_histogram(rider_summary.all_times)
         if rider_curve is not None:
             x_r, y_r = rider_curve
+            y_r = y_r / y_r.max()
             fig.add_trace(
                 go.Scatter(
                     x=x_r,
@@ -238,6 +325,7 @@ def plot_rider_vs_field(
                     fillcolor="rgba(31,119,180,0.35)",
                     line=dict(color=BLUE, width=2),
                     name=f"{rider_summary.display_name} ({len(rider_summary.all_times)} runs)",
+                    hovertemplate=normalized_hover,
                 )
             )
         else:
@@ -253,10 +341,13 @@ def plot_rider_vs_field(
 
     # Rider estimated time line
     if rider_summary.estimated_time is not None:
-        label = f"Est. time: {rider_summary.estimated_time:.1f}s"
-        if rider_summary.estimated_source == "empirical":
-            label += " (empirical)"
-        _add_vline(fig, rider_summary.estimated_time, BLUE, None, label)
+        _add_vline(
+            fig,
+            rider_summary.estimated_time,
+            BLUE,
+            None,
+            f"Est: {rider_summary.estimated_time:.1f}s",
+        )
 
     # Field median line
     if field_summary.median_time is not None:
@@ -265,10 +356,12 @@ def plot_rider_vs_field(
             field_summary.median_time,
             GREY,
             "dash",
-            f"Field median: {field_summary.median_time:.1f}s",
+            f"Median: {field_summary.median_time:.1f}s",
         )
 
-    fig.update_layout(**_base_layout(title))
+    layout = _base_layout(title)
+    layout["yaxis"]["title"] = dict(text="Relative Density", font=dict(size=12, color=AXIS_COLOR))
+    fig.update_layout(**layout)
     return fig
 
 
@@ -300,6 +393,7 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
                     fillcolor="rgba(255,127,14,0.3)",
                     line=dict(color=ORANGE, width=2),
                     name=f"{scratch.display_name} ({len(scratch.all_times)} runs)",
+                    hovertemplate=_distribution_hovertemplate(),
                 )
             )
         else:
@@ -327,6 +421,7 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
                     fillcolor="rgba(31,119,180,0.35)",
                     line=dict(color=BLUE, width=2),
                     name=f"{rider.display_name} ({len(rider.all_times)} runs)",
+                    hovertemplate=_distribution_hovertemplate(),
                 )
             )
         else:
@@ -340,14 +435,26 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
                 )
             )
 
-    # Estimated time vertical lines
+    # Estimated time vertical lines (no annotations — handicap annotation covers these)
     if scratch.estimated_time is not None:
         _add_vline(
-            fig, scratch.estimated_time, ORANGE, None, f"Est: {scratch.estimated_time:.1f}s"
+            fig,
+            scratch.estimated_time,
+            ORANGE,
+            None,
+            f"Est: {scratch.estimated_time:.1f}s",
+            annotate=False,
         )
 
     if rider.estimated_time is not None:
-        _add_vline(fig, rider.estimated_time, BLUE, None, f"Est: {rider.estimated_time:.1f}s")
+        _add_vline(
+            fig,
+            rider.estimated_time,
+            BLUE,
+            None,
+            f"Est: {rider.estimated_time:.1f}s",
+            annotate=False,
+        )
 
     # Handicap annotation arrow
     if (
@@ -360,34 +467,40 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
         hcap_text = f"<b>{sign}{comparison.handicap_value:.2f}s</b>"
         source_text = f"<i>({comparison.handicap_source})</i>"
 
+        annotation_font = dict(size=14, family=FONT_FAMILY, color=TITLE_COLOR)
+
         if abs(comparison.handicap_value) > 0.01:
             fig.add_annotation(
                 x=mid_x,
-                y=0.85,
+                y=0.97,
                 xref="x",
                 yref="paper",
                 text=f"{hcap_text}<br>{source_text}",
                 showarrow=False,
-                font=dict(size=14),
+                font=annotation_font,
                 align="center",
+                bgcolor="white",
+                bordercolor="rgba(0,0,0,0.12)",
+                borderpad=6,
+                borderwidth=1,
             )
             # Horizontal line between the two estimated times
             fig.add_shape(
                 type="line",
                 x0=scratch.estimated_time,
                 x1=rider.estimated_time,
-                y0=0.80,
-                y1=0.80,
+                y0=0.78,
+                y1=0.78,
                 xref="x",
                 yref="paper",
-                line=dict(color="black", width=1.5),
+                line=dict(color=AXIS_COLOR, width=1.5),
             )
             # Left arrowhead (pointing at scratch)
             fig.add_annotation(
                 x=scratch.estimated_time,
-                y=0.80,
+                y=0.78,
                 ax=mid_x,
-                ay=0.80,
+                ay=0.78,
                 xref="x",
                 yref="paper",
                 axref="x",
@@ -396,15 +509,15 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
                 arrowhead=2,
                 arrowsize=1.2,
                 arrowwidth=1.5,
-                arrowcolor="black",
+                arrowcolor=AXIS_COLOR,
                 text="",
             )
             # Right arrowhead (pointing at rider)
             fig.add_annotation(
                 x=rider.estimated_time,
-                y=0.80,
+                y=0.78,
                 ax=mid_x,
-                ay=0.80,
+                ay=0.78,
                 xref="x",
                 yref="paper",
                 axref="x",
@@ -413,19 +526,23 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
                 arrowhead=2,
                 arrowsize=1.2,
                 arrowwidth=1.5,
-                arrowcolor="black",
+                arrowcolor=AXIS_COLOR,
                 text="",
             )
         else:
             fig.add_annotation(
                 x=mid_x,
-                y=0.85,
+                y=0.97,
                 xref="x",
                 yref="paper",
                 text=f"0.00s<br>{source_text}",
                 showarrow=False,
-                font=dict(size=14),
+                font=annotation_font,
                 align="center",
+                bgcolor="white",
+                bordercolor="rgba(0,0,0,0.12)",
+                borderpad=6,
+                borderwidth=1,
             )
 
     fig.update_layout(**_base_layout(title))
