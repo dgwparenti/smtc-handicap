@@ -39,6 +39,7 @@ def build_stan_data(db_path: str | Path, start_position: str, *, min_runs: int =
     df = _filter_outliers(df, start_position)
     df = _filter_min_runs(df, min_runs)
 
+    df = _collapse_rare_race_types(df, min_obs=100)
     rider_map = _build_index_map(df["rider_id"].unique())
     race_type_map = _build_race_type_map(df)
     season_map, season_num = _build_season_data(df)
@@ -174,6 +175,16 @@ def _filter_outliers(df: pd.DataFrame, start_position: str) -> pd.DataFrame:
     return df[(df["finish_time"] >= lower_bound) & (df["finish_time"] <= upper_bound)].reset_index(
         drop=True
     )
+
+
+def _collapse_rare_race_types(df: pd.DataFrame, min_obs: int = 30) -> pd.DataFrame:
+    """Collapse race types with fewer than min_obs observations into 'OTHER'."""
+    counts = df.groupby("race_type_label").size()
+    rare = counts[counts < min_obs].index
+    if len(rare) > 0:
+        df = df.copy()
+        df.loc[df["race_type_label"].isin(rare), "race_type_label"] = "OTHER"
+    return df
 
 
 def _build_index_map(unique_ids: np.ndarray) -> dict[str, int]:

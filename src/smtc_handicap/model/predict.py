@@ -2,24 +2,18 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 import pandas as pd
-from cmdstanpy import CmdStanMCMC
+
+if TYPE_CHECKING:
+    import arviz as az
+    from cmdstanpy import CmdStanMCMC
 
 
-def get_posterior_samples(fit: CmdStanMCMC) -> dict[str, np.ndarray]:
-    """Extract key parameter arrays from the fit.
-
-    Returns dict with arrays shaped (num_draws, ...):
-      - alpha: (D, J)
-      - eta: (D, S)
-      - beta_trend: (D, J)
-      - beta_trend_mu: (D,)
-      - sigma_trend: (D,)
-      - gamma: (D, R)
-      - beta_improve: (D,)
-      - sigma_obs: (D,)
-    """
+def _extract_from_cmdstanmcmc(fit: CmdStanMCMC) -> dict[str, np.ndarray]:
+    """Extract posterior samples from a CmdStanMCMC object."""
     draws = fit.draws_pd()
 
     alpha_cols = sorted(
@@ -47,9 +41,31 @@ def get_posterior_samples(fit: CmdStanMCMC) -> dict[str, np.ndarray]:
     gamma = draws[gamma_cols].values  # (D, R)
 
     sigma_obs = draws["sigma_obs"].values  # (D,)
-    beta_improve = draws["beta_improve"].values  # (D,)
     beta_trend_mu = draws["beta_trend_mu"].values  # (D,)
     sigma_trend = draws["sigma_trend"].values  # (D,)
+
+    # Per-rider beta_improve (new) or scalar beta_improve (legacy)
+    beta_improve_cols = sorted(
+        [c for c in draws.columns if c.startswith("beta_improve[")],
+        key=lambda c: int(c.split("[")[1].rstrip("]")),
+    )
+    if beta_improve_cols:
+        beta_improve = draws[beta_improve_cols].values  # (D, J)
+    else:
+        beta_improve = draws["beta_improve"].values  # (D,) — legacy scalar
+
+    # Global quadratic season curvature (may not exist in older models)
+    beta_quad = draws["beta_quad"].values if "beta_quad" in draws.columns else None  # (D,)
+
+    # Student-t degrees of freedom (may not exist in Normal-only models)
+    nu = draws["nu"].values if "nu" in draws.columns else None  # (D,)
+
+    # Per-rider sigma (heteroscedastic model)
+    sigma_rider_cols = sorted(
+        [c for c in draws.columns if c.startswith("sigma_rider[")],
+        key=lambda c: int(c.split("[")[1].rstrip("]")),
+    )
+    sigma_rider = draws[sigma_rider_cols].values if sigma_rider_cols else None  # (D, J)
 
     return {
         "alpha": alpha,
@@ -59,22 +75,92 @@ def get_posterior_samples(fit: CmdStanMCMC) -> dict[str, np.ndarray]:
         "sigma_trend": sigma_trend,
         "gamma": gamma,
         "beta_improve": beta_improve,
+        "beta_quad": beta_quad,
         "sigma_obs": sigma_obs,
+        "sigma_rider": sigma_rider,
+        "nu": nu,
     }
 
 
+def _extract_var(posterior: object, name: str) -> np.ndarray | None:
+    """Extract a variable from an xarray posterior, stacking chains+draws into rows."""
+    if name not in posterior:
+        return None
+    return posterior[name].stack(sample=("chain", "draw")).values.T
+
+
+def _extract_from_inferencedata(idata: az.InferenceData) -> dict[str, np.ndarray]:
+    """Extract posterior samples from an ArviZ InferenceData object."""
+    post = idata.posterior
+    return {
+        "alpha": _extract_var(post, "alpha"),  # (D, J)
+        "eta": _extract_var(post, "eta"),  # (D, S)
+        "beta_trend": _extract_var(post, "beta_trend"),  # (D, J)
+        "beta_trend_mu": _extract_var(post, "beta_trend_mu"),  # (D,)
+        "sigma_trend": _extract_var(post, "sigma_trend"),  # (D,)
+        "gamma": _extract_var(post, "gamma"),  # (D, R)
+        "beta_improve": _extract_var(post, "beta_improve"),  # (D,)
+        "beta_quad": _extract_var(post, "beta_quad"),  # (D,) or None
+        "sigma_obs": _extract_var(post, "sigma_obs"),  # (D,)
+        "sigma_rider": _extract_var(post, "sigma_rider"),  # (D, J) or None
+        "nu": _extract_var(post, "nu"),  # (D,) or None
+    }
+
+
+def get_posterior_samples(fit: CmdStanMCMC | az.InferenceData) -> dict[str, np.ndarray]:
+    """Extract key parameter arrays from a fit.
+
+    Accepts either a CmdStanMCMC object or an ArviZ InferenceData object.
+
+    Returns dict with arrays shaped (num_draws, ...):
+      - alpha: (D, J)
+      - eta: (D, S)
+      - beta_trend: (D, J)
+      - beta_trend_mu: (D,)
+      - sigma_trend: (D,)
+      - gamma: (D, R)
+      - beta_improve: (D,)
+      - beta_quad: (D,) or None
+      - sigma_obs: (D,)
+      - sigma_rider: (D, J) or None (if per-rider sigma model)
+      - nu: (D,) or None (if Student-t model)
+    """
+    # Duck-type: InferenceData has a .posterior attribute
+    if hasattr(fit, "posterior"):
+        return _extract_from_inferencedata(fit)
+    return _extract_from_cmdstanmcmc(fit)
+
+
 def _compute_rider_consistency(stan_data: dict, posterior: dict) -> dict[str, float]:
-    """Compute per-rider residual SD post-hoc from posterior mean predictions."""
-    df = stan_data["meta_df"]
+    """Compute per-rider consistency (observation noise SD).
+
+    If the model includes per-rider sigma_rider, use the posterior mean directly.
+    Otherwise, fall back to computing residual SD post-hoc.
+    """
     rider_map = stan_data["meta_rider_map"]
+
+    # If per-rider sigma available from model, use it directly
+    if posterior.get("sigma_rider") is not None:
+        sigma_rider_mean = posterior["sigma_rider"].mean(axis=0)  # (J,)
+        consistency = {}
+        for rider_id, idx in rider_map.items():
+            consistency[rider_id] = float(sigma_rider_mean[idx - 1])
+        return consistency
+
+    # Fallback: compute from residuals (for models without per-rider sigma)
+    df = stan_data["meta_df"]
     season_num = stan_data["season_num"]
 
-    # Use posterior means for prediction
     alpha_mean = posterior["alpha"].mean(axis=0)
     eta_mean = posterior["eta"].mean(axis=0)
     beta_trend_mean = posterior["beta_trend"].mean(axis=0)
     gamma_mean = posterior["gamma"].mean(axis=0)
-    beta_mean = float(posterior["beta_improve"].mean())
+    beta_imp = posterior["beta_improve"]
+    beta_improve_mean = beta_imp.mean(axis=0) if beta_imp.ndim == 2 else None
+    beta_scalar_mean = float(beta_imp.mean()) if beta_imp.ndim == 1 else 0.0
+    beta_quad_mean = (
+        float(posterior["beta_quad"].mean()) if posterior.get("beta_quad") is not None else 0.0
+    )
 
     residuals_by_rider: dict[str, list[float]] = {}
     for _, row in df.iterrows():
@@ -82,9 +168,17 @@ def _compute_rider_consistency(stan_data: dict, posterior: dict) -> dict[str, fl
         j = rider_map[rid] - 1
         s = int(row["season_idx"]) - 1
         r = int(row["race_type_idx"]) - 1
-        pred = alpha_mean[j] + eta_mean[s] + beta_trend_mean[j] * season_num[s] + gamma_mean[r]
-        if stan_data["is_sl"][j]:
-            pred += beta_mean * row["run_seq"]
+        pred = (
+            alpha_mean[j]
+            + eta_mean[s]
+            + beta_trend_mean[j] * season_num[s]
+            + beta_quad_mean * season_num[s] ** 2
+            + gamma_mean[r]
+        )
+        if beta_improve_mean is not None:
+            pred += beta_improve_mean[j] * row["run_seq"]
+        elif stan_data["is_sl"][j]:
+            pred += beta_scalar_mean * row["run_seq"]
         residual = row["finish_time"] - pred
         residuals_by_rider.setdefault(rid, []).append(residual)
 
@@ -93,27 +187,46 @@ def _compute_rider_consistency(stan_data: dict, posterior: dict) -> dict[str, fl
         if len(resids) >= 2:
             consistency[rid] = float(np.std(resids, ddof=1))
         else:
-            # Not enough data — use the shared sigma_obs as fallback
             consistency[rid] = float(posterior["sigma_obs"].mean())
     return consistency
 
 
 def calculate_handicaps(
-    fit: CmdStanMCMC,
+    fit: CmdStanMCMC | az.InferenceData,
     stan_data: dict,
     field_rider_ids: list[str],
     race_type_idx: int,
     season_idx: int = 1,
+    scratch_rider_id: str | None = None,
+    *,
+    phi_inv_p: float | None = None,
+    max_shift: float | None = None,
+    aggregation: str = "median",
+    sigma_shrinkage: float = 1.0,
+    handicap_scale: float = 1.0,
+    handicap_power: float = 1.0,
 ) -> pd.DataFrame:
     """Compute handicaps for a field of riders in a given race type.
 
     Parameters
     ----------
-    fit : fitted CmdStanMCMC object
+    fit : fitted CmdStanMCMC or ArviZ InferenceData object
     stan_data : the dict returned by build_stan_data (includes meta_ keys)
     field_rider_ids : list of rider_id strings to include
     race_type_idx : 1-based index into race types
     season_idx : 1-based season index (default 1)
+    scratch_rider_id : if provided, use this rider as scratch (handicap=0).
+        Falls back to auto-detection (fastest predicted) if the rider
+        is not in the field.
+    phi_inv_p : quantile shift multiplier (default: -1.30)
+    max_shift : cap on quantile shift magnitude (default: -2.5)
+    aggregation : "median" or "mean" for handicap summarization (default: "median")
+    sigma_shrinkage : how much to use per-rider sigma vs population sigma_obs
+        for the quantile shift. 1.0 = fully per-rider (default), 0.0 = uniform
+        population sigma. Values in between shrink toward the population mean.
+    handicap_scale : linear scale factor for handicap differences (default: 1.175)
+    handicap_power : power-law exponent for concave compression of handicaps
+        (default: 0.84). Values < 1.0 compress large handicaps more than small.
 
     Returns
     -------
@@ -167,18 +280,81 @@ def calculate_handicaps(
             + posterior["beta_trend"][:, j] * season_num[s]
             + posterior["gamma"][:, r]
         )
-        if info["is_sl"]:
-            next_run = info["max_run_seq"] + 1
-            pred_times[:, i] += posterior["beta_improve"] * next_run
+        # Quadratic season curvature
+        if posterior.get("beta_quad") is not None:
+            pred_times[:, i] += posterior["beta_quad"] * season_num[s] ** 2
 
-    # Handicap = rider time - scratch (fastest) time per draw
-    scratch_times = pred_times.min(axis=1, keepdims=True)  # (D, 1)
-    handicaps = pred_times - scratch_times  # (D, n_field)
+        # Within-season learning (per-rider or scalar, all riders)
+        next_run = info["max_run_seq"] + 1
+        beta_imp = posterior["beta_improve"]
+        if beta_imp.ndim == 2:
+            # Per-rider beta_improve: (D, J)
+            pred_times[:, i] += beta_imp[:, j] * next_run
+        elif info["is_sl"]:
+            # Legacy scalar beta_improve: only for SL riders
+            pred_times[:, i] += beta_imp * next_run
+
+    # Quantile-based consistency adjustment for tighter handicaps.
+    # Shift predicted times to each rider's competitive quantile (p=0.10),
+    # using posterior mean of per-rider sigma (not per-draw, to reduce noise).
+    # Cap the maximum shift to prevent over-adjustment for very volatile riders.
+    # === TUNABLE PARAMETERS (Ralph Loop optimizes these) ===
+    if phi_inv_p is None:
+        phi_inv_p = -1.30  # Optimized via Ralph Loop grid search
+    if max_shift is None:
+        max_shift = -2.5  # Cap on quantile shift (more negative = less capping)
+    # === END TUNABLE PARAMETERS ===
+
+    if posterior.get("sigma_rider") is not None:
+        # Use posterior mean of sigma_rider for stable quantile shift
+        sigma_mean = posterior["sigma_rider"].mean(axis=0)  # (J,)
+        sigma_arr = np.array([sigma_mean[info["idx"]] for info in riders_info])
+        # Shrink per-rider sigma toward population mean (sigma_obs)
+        if sigma_shrinkage < 1.0:
+            sigma_pop_mean = float(posterior["sigma_obs"].mean())
+            sigma_arr = sigma_shrinkage * sigma_arr + (1.0 - sigma_shrinkage) * sigma_pop_mean
+        raw_shift = sigma_arr * phi_inv_p  # negative values
+        capped_shift = np.maximum(raw_shift, max_shift)  # cap magnitude
+        pred_q = pred_times + capped_shift[np.newaxis, :]
+    else:
+        # Post-hoc fallback: use residual SD for consistency adjustment
+        consistency_arr = np.array(
+            [
+                rider_consistency.get(info["rider_id"], float(posterior["sigma_obs"].mean()))
+                for info in riders_info
+            ]
+        )
+        raw_shift = consistency_arr * phi_inv_p
+        capped_shift = np.maximum(raw_shift, max_shift)
+        pred_q = pred_times + capped_shift[np.newaxis, :]
+
+    # Fix scratch rider across all draws to avoid switching noise.
+    # Use committee-designated scratch if provided, else auto-detect fastest.
+    scratch_idx = None
+    if scratch_rider_id is not None:
+        for i, info in enumerate(riders_info):
+            if info["rider_id"] == scratch_rider_id:
+                scratch_idx = i
+                break
+    if scratch_idx is None:
+        mean_pred_q = pred_q.mean(axis=0)  # (n_field,)
+        scratch_idx = int(np.argmin(mean_pred_q))
+    scratch_q = pred_q[:, scratch_idx : scratch_idx + 1]  # (D, 1)
+    handicaps = pred_q - scratch_q  # (D, n_field)
+    # Power-law compression: sign(h) * scale * |h|^power
+    # Concave (power < 1) compresses large handicaps more than small ones.
+    if handicap_power != 1.0 or handicap_scale != 1.0:
+        abs_h = np.abs(handicaps)
+        handicaps = np.sign(handicaps) * handicap_scale * np.power(abs_h, handicap_power)
+    handicaps[:, scratch_idx] = 0.0  # exact zero for scratch rider
 
     # Summaries
     results = []
     for i, info in enumerate(riders_info):
-        h_mean = float(np.mean(handicaps[:, i]))
+        # Mean for handicap estimate (responsive to full posterior)
+        h_mean = float(
+            np.median(handicaps[:, i]) if aggregation == "median" else np.mean(handicaps[:, i])
+        )
         h_lo = float(np.percentile(handicaps[:, i], 2.5))
         h_hi = float(np.percentile(handicaps[:, i], 97.5))
         exp_time = float(np.mean(pred_times[:, i]))

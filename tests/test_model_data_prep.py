@@ -8,7 +8,7 @@ import numpy as np
 import pytest
 
 from smtc_handicap.db import CrestaDB
-from smtc_handicap.model.data_prep import build_stan_data
+from smtc_handicap.model.data_prep import _build_race_type_map, build_stan_data
 from smtc_handicap.models import Race, Rider, TimeRecord
 
 
@@ -158,9 +158,17 @@ class TestBuildStanData:
         assert max(rt_indices) == data["R"]
 
     def test_practice_is_index_1(self, sample_db):
+        # With small fixture data (<100 obs per type), all types collapse to OTHER
         data = build_stan_data(sample_db, "TOP", min_runs=1)
         race_type_map = data["meta_race_type_map"]
-        assert race_type_map["PRACTICE"] == 1
+        assert race_type_map == {"OTHER": 1}
+
+        # Verify _build_race_type_map assigns PRACTICE index 1 when present
+        import pandas as pd
+
+        df = pd.DataFrame({"race_type_label": ["PRACTICE", "STAGNI CUP", "PRACTICE"]})
+        rt_map = _build_race_type_map(df)
+        assert rt_map["PRACTICE"] == 1
 
     def test_is_sl_array(self, sample_db):
         data = build_stan_data(sample_db, "TOP", min_runs=1)
@@ -324,10 +332,13 @@ class TestBuildStanData:
         assert "prior_sigma_season_sd" not in data
 
     def test_race_type_normalization(self, sample_db):
-        """'THE STAGNI CUP' should be normalized to 'STAGNI CUP'."""
+        """'THE STAGNI CUP' should be normalized to 'STAGNI CUP' at the DF level."""
         data = build_stan_data(sample_db, "TOP", min_runs=1)
+        df = data["meta_df"]
+        # Normalization still happens — no raw "THE STAGNI CUP" in the DataFrame
+        assert "THE STAGNI CUP" not in df["race_type_label"].values
+        # With small data, STAGNI CUP is collapsed to OTHER in the map
         race_type_map = data["meta_race_type_map"]
-        assert "STAGNI CUP" in race_type_map
         assert "THE STAGNI CUP" not in race_type_map
 
     def test_rnr_riders_included(self, tmp_path):

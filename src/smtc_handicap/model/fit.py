@@ -24,7 +24,7 @@ def fit_model(
     chains: int = 4,
     iter_warmup: int = 1000,
     iter_sampling: int = 2000,
-    adapt_delta: float = 0.9,
+    adapt_delta: float = 0.95,
     max_treedepth: int = 12,
 ) -> CmdStanMCMC:
     """Run MCMC sampling and return the fit object.
