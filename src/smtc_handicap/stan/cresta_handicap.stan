@@ -1,5 +1,5 @@
 // =============================================================================
-// Cresta Run Handicap Model (Multi-Season, Heteroscedastic, Student-t)
+// Cresta Run Handicap Model (Multi-Season, Heteroscedastic)
 // Hierarchical Bayesian model for predicting rider finish times.
 //
 // Separate models are fitted for TOP and JUNCTION start positions.
@@ -8,8 +8,6 @@
 // are more consistent than others, enabling quantile-based handicaps
 // that penalize volatile riders.
 //
-// Student-t likelihood for robustness to outlier times, improving
-// alpha[j] estimation for riders with occasional anomalous runs.
 //
 // Season effects: global eta[S] + per-rider linear trend beta_trend[J].
 // =============================================================================
@@ -67,8 +65,6 @@ parameters {
   // --- SL within-season improvement ---
   real beta_improve;                        // Mean improvement rate (seconds per run, expect < 0)
 
-  // --- Student-t degrees of freedom ---
-  real<lower=2> nu;                         // df for heavy-tailed likelihood (>30 ≈ normal)
 }
 
 transformed parameters {
@@ -137,15 +133,12 @@ model {
   // --- SL improvement ---
   beta_improve ~ normal(-0.3, 0.3);
 
-  // --- Student-t degrees of freedom ---
-  nu ~ gamma(2, 0.1);  // prior favors moderate tails (mode ~10)
-
-  // --- Likelihood (Student-t, per-rider noise) ---
+  // --- Likelihood (Normal, per-rider noise) ---
   {
     vector[N] sigma_vec;
     for (n in 1:N)
       sigma_vec[n] = sigma_rider[rider[n]];
-    y ~ student_t(nu, mu, sigma_vec);
+    y ~ normal(mu, sigma_vec);
   }
 }
 
@@ -156,10 +149,10 @@ generated quantities {
   // Posterior predictive checks
   vector[N] y_rep;
   for (n in 1:N)
-    y_rep[n] = student_t_rng(nu, mu[n], sigma_rider[rider[n]]);
+    y_rep[n] = normal_rng(mu[n], sigma_rider[rider[n]]);
 
   // Log-likelihood for LOO-CV model comparison
   vector[N] log_lik;
   for (n in 1:N)
-    log_lik[n] = student_t_lpdf(y[n] | nu, mu[n], sigma_rider[rider[n]]);
+    log_lik[n] = normal_lpdf(y[n] | mu[n], sigma_rider[rider[n]]);
 }
