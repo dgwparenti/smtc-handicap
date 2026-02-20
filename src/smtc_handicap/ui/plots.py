@@ -24,6 +24,13 @@ GREEN = "#2ca02c"
 RED = "#d62728"
 GREY = "#7f7f7f"
 
+# Typography & styling constants
+FONT_FAMILY = "Inter, Source Sans Pro, sans-serif"
+TITLE_COLOR = "#2C3E6B"
+AXIS_COLOR = "#4A5568"
+GRID_COLOR = "rgba(0,0,0,0.06)"
+AXIS_LINE_COLOR = "#CBD5E0"
+
 CHART_HEIGHT = 350
 CHART_MARGIN = dict(l=50, r=20, t=40, b=50)
 
@@ -54,28 +61,49 @@ def _smoothed_histogram(times: list[float]) -> tuple[np.ndarray, np.ndarray] | N
 def _base_layout(title: str) -> dict:
     """Return common Plotly layout kwargs."""
     return dict(
-        title=dict(text=title, x=0.02, y=0.95, font=dict(size=16)),
+        title=dict(
+            text=title,
+            x=0.02,
+            y=0.95,
+            font=dict(size=16, color=TITLE_COLOR, family=FONT_FAMILY, weight="bold"),
+        ),
+        font=dict(family=FONT_FAMILY, color=AXIS_COLOR),
         height=CHART_HEIGHT,
         margin=CHART_MARGIN,
         plot_bgcolor="white",
+        paper_bgcolor="white",
         xaxis=dict(
-            title="Finish Time (seconds)",
+            title=dict(text="Finish Time (seconds)", font=dict(size=12, color=AXIS_COLOR)),
             showgrid=False,
             zeroline=False,
+            showline=True,
+            linecolor=AXIS_LINE_COLOR,
+            linewidth=1,
+            tickfont=dict(size=11, color=AXIS_COLOR),
         ),
         yaxis=dict(
-            title="Number of Runs",
+            title=dict(text="Number of Runs", font=dict(size=12, color=AXIS_COLOR)),
             showgrid=True,
-            gridcolor="lightgrey",
+            gridcolor=GRID_COLOR,
+            gridwidth=0.5,
             zeroline=False,
+            showline=False,
+            tickfont=dict(size=11, color=AXIS_COLOR),
         ),
         legend=dict(
             x=0.98,
             y=0.98,
             xanchor="right",
             yanchor="top",
-            bgcolor="rgba(255,255,255,0.8)",
-            font=dict(size=11),
+            bgcolor="rgba(255,255,255,0.95)",
+            bordercolor="rgba(0,0,0,0.08)",
+            borderwidth=1,
+            font=dict(size=11, family=FONT_FAMILY),
+        ),
+        hoverlabel=dict(
+            bgcolor="white",
+            bordercolor="rgba(0,0,0,0.15)",
+            font=dict(size=12, family=FONT_FAMILY, color="#1A1A2E"),
         ),
     )
 
@@ -94,7 +122,7 @@ def _empty_figure(message: str, title: str) -> go.Figure:
             x=0.5,
             y=0.5,
             showarrow=False,
-            font=dict(size=14, color="grey"),
+            font=dict(size=14, color="grey", family=FONT_FAMILY),
         )
     ]
     fig.update_layout(**layout)
@@ -111,9 +139,19 @@ def _add_vline(fig: go.Figure, x: float, color: str, dash: str | None, label: st
             line=dict(color=color, width=2, dash=dash),
             name=label,
             showlegend=True,
+            hoverinfo="skip",
         )
     )
-    fig.add_vline(x=x, line=dict(color=color, width=2, dash=dash or "solid"))
+    fig.add_vline(
+        x=x,
+        line=dict(color=color, width=2, dash=dash or "solid"),
+        opacity=0.8,
+    )
+
+
+def _distribution_hovertemplate() -> str:
+    """Hover template for smoothed distribution curves."""
+    return "<b>%{x:.1f}s</b><br>~%{y:.0f} runs<extra></extra>"
 
 
 def plot_rider_performance(summary: RiderTimeSummary) -> go.Figure:
@@ -141,6 +179,7 @@ def plot_rider_performance(summary: RiderTimeSummary) -> go.Figure:
                 fillcolor="rgba(31,119,180,0.3)",
                 line=dict(color=BLUE, width=2),
                 name=f"All time ({len(summary.all_times)} runs)",
+                hovertemplate=_distribution_hovertemplate(),
             )
         )
     else:
@@ -166,6 +205,7 @@ def plot_rider_performance(summary: RiderTimeSummary) -> go.Figure:
                     mode="lines",
                     line=dict(color=BLUE, width=2, dash="dash"),
                     name=f"Season ({len(summary.season_times)} runs)",
+                    hovertemplate=_distribution_hovertemplate(),
                 )
             )
         else:
@@ -221,6 +261,7 @@ def plot_rider_vs_field(
                     f"All riders ({field_summary.n_riders} riders,"
                     f" {len(field_summary.all_times)} runs)"
                 ),
+                hovertemplate=_distribution_hovertemplate(),
             )
         )
 
@@ -238,6 +279,7 @@ def plot_rider_vs_field(
                     fillcolor="rgba(31,119,180,0.35)",
                     line=dict(color=BLUE, width=2),
                     name=f"{rider_summary.display_name} ({len(rider_summary.all_times)} runs)",
+                    hovertemplate=_distribution_hovertemplate(),
                 )
             )
         else:
@@ -300,6 +342,7 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
                     fillcolor="rgba(255,127,14,0.3)",
                     line=dict(color=ORANGE, width=2),
                     name=f"{scratch.display_name} ({len(scratch.all_times)} runs)",
+                    hovertemplate=_distribution_hovertemplate(),
                 )
             )
         else:
@@ -327,6 +370,7 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
                     fillcolor="rgba(31,119,180,0.35)",
                     line=dict(color=BLUE, width=2),
                     name=f"{rider.display_name} ({len(rider.all_times)} runs)",
+                    hovertemplate=_distribution_hovertemplate(),
                 )
             )
         else:
@@ -360,6 +404,8 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
         hcap_text = f"<b>{sign}{comparison.handicap_value:.2f}s</b>"
         source_text = f"<i>({comparison.handicap_source})</i>"
 
+        annotation_font = dict(size=14, family=FONT_FAMILY, color=TITLE_COLOR)
+
         if abs(comparison.handicap_value) > 0.01:
             fig.add_annotation(
                 x=mid_x,
@@ -368,8 +414,12 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
                 yref="paper",
                 text=f"{hcap_text}<br>{source_text}",
                 showarrow=False,
-                font=dict(size=14),
+                font=annotation_font,
                 align="center",
+                bgcolor="white",
+                bordercolor="rgba(0,0,0,0.12)",
+                borderpad=6,
+                borderwidth=1,
             )
             # Horizontal line between the two estimated times
             fig.add_shape(
@@ -380,7 +430,7 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
                 y1=0.80,
                 xref="x",
                 yref="paper",
-                line=dict(color="black", width=1.5),
+                line=dict(color=AXIS_COLOR, width=1.5),
             )
             # Left arrowhead (pointing at scratch)
             fig.add_annotation(
@@ -396,7 +446,7 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
                 arrowhead=2,
                 arrowsize=1.2,
                 arrowwidth=1.5,
-                arrowcolor="black",
+                arrowcolor=AXIS_COLOR,
                 text="",
             )
             # Right arrowhead (pointing at rider)
@@ -413,7 +463,7 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
                 arrowhead=2,
                 arrowsize=1.2,
                 arrowwidth=1.5,
-                arrowcolor="black",
+                arrowcolor=AXIS_COLOR,
                 text="",
             )
         else:
@@ -424,8 +474,12 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
                 yref="paper",
                 text=f"0.00s<br>{source_text}",
                 showarrow=False,
-                font=dict(size=14),
+                font=annotation_font,
                 align="center",
+                bgcolor="white",
+                bordercolor="rgba(0,0,0,0.12)",
+                borderpad=6,
+                borderwidth=1,
             )
 
     fig.update_layout(**_base_layout(title))

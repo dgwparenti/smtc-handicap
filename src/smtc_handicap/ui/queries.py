@@ -14,11 +14,11 @@ import numpy as np
 
 from smtc_handicap.db import CrestaDB
 
-# Outlier bounds per start position (wider than model training bounds —
-# we want to show the full distribution, just exclude clearly erroneous values).
+# Outlier bounds per start position (aligned with model training bounds
+# to exclude noisy data outside the credible range).
 OUTLIER_BOUNDS: dict[str, tuple[float, float]] = {
-    "TOP": (45.0, 120.0),
-    "JUNCTION": (35.0, 90.0),
+    "TOP": (49.7, 70.0),
+    "JUNCTION": (41.0, 70.0),
 }
 
 
