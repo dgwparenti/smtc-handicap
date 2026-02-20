@@ -2,26 +2,18 @@
 
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
+
 import numpy as np
 import pandas as pd
-from cmdstanpy import CmdStanMCMC
+
+if TYPE_CHECKING:
+    import arviz as az
+    from cmdstanpy import CmdStanMCMC
 
 
-def get_posterior_samples(fit: CmdStanMCMC) -> dict[str, np.ndarray]:
-    """Extract key parameter arrays from the fit.
-
-    Returns dict with arrays shaped (num_draws, ...):
-      - alpha: (D, J)
-      - eta: (D, S)
-      - beta_trend: (D, J)
-      - beta_trend_mu: (D,)
-      - sigma_trend: (D,)
-      - gamma: (D, R)
-      - beta_improve: (D,)
-      - beta_quad: (D,) or None
-      - sigma_obs: (D,)
-      - sigma_rider: (D, J) or None (if per-rider sigma model)
-    """
+def _extract_from_cmdstanmcmc(fit: CmdStanMCMC) -> dict[str, np.ndarray]:
+    """Extract posterior samples from a CmdStanMCMC object."""
     draws = fit.draws_pd()
 
     alpha_cols = sorted(
@@ -75,6 +67,53 @@ def get_posterior_samples(fit: CmdStanMCMC) -> dict[str, np.ndarray]:
         "sigma_obs": sigma_obs,
         "sigma_rider": sigma_rider,
     }
+
+
+def _extract_var(posterior: object, name: str) -> np.ndarray | None:
+    """Extract a variable from an xarray posterior, stacking chains+draws into rows."""
+    if name not in posterior:
+        return None
+    return posterior[name].stack(sample=("chain", "draw")).values.T
+
+
+def _extract_from_inferencedata(idata: az.InferenceData) -> dict[str, np.ndarray]:
+    """Extract posterior samples from an ArviZ InferenceData object."""
+    post = idata.posterior
+    return {
+        "alpha": _extract_var(post, "alpha"),  # (D, J)
+        "eta": _extract_var(post, "eta"),  # (D, S)
+        "beta_trend": _extract_var(post, "beta_trend"),  # (D, J)
+        "beta_trend_mu": _extract_var(post, "beta_trend_mu"),  # (D,)
+        "sigma_trend": _extract_var(post, "sigma_trend"),  # (D,)
+        "gamma": _extract_var(post, "gamma"),  # (D, R)
+        "beta_improve": _extract_var(post, "beta_improve"),  # (D,)
+        "beta_quad": _extract_var(post, "beta_quad"),  # (D,) or None
+        "sigma_obs": _extract_var(post, "sigma_obs"),  # (D,)
+        "sigma_rider": _extract_var(post, "sigma_rider"),  # (D, J) or None
+    }
+
+
+def get_posterior_samples(fit: CmdStanMCMC | az.InferenceData) -> dict[str, np.ndarray]:
+    """Extract key parameter arrays from a fit.
+
+    Accepts either a CmdStanMCMC object or an ArviZ InferenceData object.
+
+    Returns dict with arrays shaped (num_draws, ...):
+      - alpha: (D, J)
+      - eta: (D, S)
+      - beta_trend: (D, J)
+      - beta_trend_mu: (D,)
+      - sigma_trend: (D,)
+      - gamma: (D, R)
+      - beta_improve: (D,)
+      - beta_quad: (D,) or None
+      - sigma_obs: (D,)
+      - sigma_rider: (D, J) or None (if per-rider sigma model)
+    """
+    # Duck-type: InferenceData has a .posterior attribute
+    if hasattr(fit, "posterior"):
+        return _extract_from_inferencedata(fit)
+    return _extract_from_cmdstanmcmc(fit)
 
 
 def _compute_rider_consistency(stan_data: dict, posterior: dict) -> dict[str, float]:
@@ -134,7 +173,7 @@ def _compute_rider_consistency(stan_data: dict, posterior: dict) -> dict[str, fl
 
 
 def calculate_handicaps(
-    fit: CmdStanMCMC,
+    fit: CmdStanMCMC | az.InferenceData,
     stan_data: dict,
     field_rider_ids: list[str],
     race_type_idx: int,
@@ -145,7 +184,7 @@ def calculate_handicaps(
 
     Parameters
     ----------
-    fit : fitted CmdStanMCMC object
+    fit : fitted CmdStanMCMC or ArviZ InferenceData object
     stan_data : the dict returned by build_stan_data (includes meta_ keys)
     field_rider_ids : list of rider_id strings to include
     race_type_idx : 1-based index into race types

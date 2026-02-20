@@ -11,6 +11,7 @@ This script:
 5. Prints PASS if avg model range < 1.0s, else FAIL
 """
 
+import argparse
 import time
 from pathlib import Path
 
@@ -18,7 +19,6 @@ import numpy as np
 import pandas as pd
 
 from smtc_handicap.model.data_prep import build_stan_data
-from smtc_handicap.model.fit import compile_model, fit_model
 from smtc_handicap.model.predict import calculate_handicaps
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
@@ -29,21 +29,39 @@ TOP_N = 5  # top finishers to evaluate tightness on
 
 
 def main() -> None:
+    parser = argparse.ArgumentParser(description="Evaluate handicap model tightness vs committee")
+    parser.add_argument(
+        "--load-fit",
+        type=Path,
+        metavar="PATH",
+        help="Load a pre-fitted model from ArviZ NetCDF instead of re-fitting",
+    )
+    args = parser.parse_args()
+
     print("=" * 70)
     print("TIGHTNESS EVALUATION — TOP Handicap Model (min_runs=50)")
     print("=" * 70)
 
-    # ---- Step 1: Build data and fit model ----
+    # ---- Step 1: Build data and fit/load model ----
     print("\n[1/3] Building Stan data...")
     stan_data = build_stan_data(DB_PATH, "TOP", min_runs=MIN_RUNS)
     print(f"  N={stan_data['N']:,}  J={stan_data['J']}  S={stan_data['S']}  R={stan_data['R']}")
 
-    print("\n[2/3] Compiling and fitting model...")
-    t0 = time.time()
-    model = compile_model()
-    fit = fit_model(model, stan_data)
-    elapsed = time.time() - t0
-    print(f"  Fit complete in {elapsed:.0f}s ({elapsed / 60:.1f} min)")
+    if args.load_fit:
+        import arviz as az
+
+        print(f"\n[2/3] Loading pre-fitted model from {args.load_fit}...")
+        fit = az.from_netcdf(args.load_fit)
+        print("  Loaded.")
+    else:
+        from smtc_handicap.model.fit import compile_model, fit_model
+
+        print("\n[2/3] Compiling and fitting model...")
+        t0 = time.time()
+        model = compile_model()
+        fit = fit_model(model, stan_data)
+        elapsed = time.time() - t0
+        print(f"  Fit complete in {elapsed:.0f}s ({elapsed / 60:.1f} min)")
 
     # ---- Step 2: Identify handicap races ----
     meta_df = stan_data["meta_df"]
