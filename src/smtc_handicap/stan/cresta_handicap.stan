@@ -60,9 +60,6 @@ parameters {
   real<lower=0> sigma_trend;                // Between-rider trend spread
   vector[J] beta_trend_raw;                 // Standardized per-rider trends
 
-  // --- Global quadratic season curvature ---
-  real beta_quad;                            // Quadratic term for population trend
-
   // --- Race-type effect (non-centered) ---
   real<lower=0> sigma_race;                 // How much race types vary
   vector[R] gamma_raw;                      // Standardized race-type effects
@@ -98,7 +95,6 @@ transformed parameters {
     mu[n] = alpha[rider[n]]
             + eta[season[n]]
             + beta_trend[rider[n]] * season_num[season[n]]
-            + beta_quad * square(season_num[season[n]])
             + gamma[race_type[n]];
 
     // SL improvement trend (only active for SL riders)
@@ -112,9 +108,9 @@ model {
   // --- Hyperpriors ---
   mu_pop ~ normal(prior_mu_pop, prior_sigma_mu_pop);
   sigma_pop ~ normal(0, 5);       // half-normal via constraint
-  sigma_season ~ normal(0, 3);
-  sigma_race ~ normal(0, 2);
-  sigma_trend ~ normal(0, 0.5);   // tighter prior to reduce trend extrapolation errors
+  sigma_season ~ normal(0, 1);    // tightened (posterior ~0.4-0.6)
+  sigma_race ~ normal(0, 1);      // tightened (posterior ~0.8)
+  sigma_trend ~ normal(0, 0.2);   // tightened (posterior ~0.4)
 
   // --- Per-rider sigma hyperpriors ---
   mu_log_sigma ~ normal(log(2.0), 0.5);    // population center ~2s
@@ -122,9 +118,6 @@ model {
 
   // --- Trend population mean ---
   beta_trend_mu ~ normal(0, 1);   // expect ~0 mean population trend
-
-  // --- Global quadratic curvature ---
-  beta_quad ~ normal(0, 0.5);     // weakly informative, expect small
 
   // --- Rider level ---
   alpha_raw ~ std_normal();        // implies alpha ~ N(mu_pop, sigma_pop)
