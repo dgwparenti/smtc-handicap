@@ -5,7 +5,7 @@ import argparse
 import logging
 from pathlib import Path
 
-from smtc_handicap.pipeline import ingest_all
+from smtc_handicap.pipeline import ingest_all, ingest_new_pdfs
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
@@ -41,6 +41,11 @@ def main() -> None:
         help="Only process PDF files (skip JSONs)",
     )
     parser.add_argument(
+        "--new-only",
+        action="store_true",
+        help="Only ingest PDFs not already in the database (skip JSONs)",
+    )
+    parser.add_argument(
         "-v",
         "--verbose",
         action="store_true",
@@ -55,10 +60,15 @@ def main() -> None:
 
     if args.pdf_only and args.json_only:
         parser.error("Cannot use --pdf-only and --json-only together")
+    if args.new_only and args.json_only:
+        parser.error("Cannot use --new-only and --json-only together")
 
-    json_dir = args.json_dir if not args.pdf_only else None
-    pdf_dir = args.pdf_dir if not args.json_only else None
-    stats = ingest_all(json_dir, pdf_dir, args.db)
+    if args.new_only:
+        stats = ingest_new_pdfs(args.pdf_dir, args.db)
+    else:
+        json_dir = args.json_dir if not args.pdf_only else None
+        pdf_dir = args.pdf_dir if not args.json_only else None
+        stats = ingest_all(json_dir, pdf_dir, args.db)
 
     print("\n" + "=" * 50)
     print("Ingestion Summary")
