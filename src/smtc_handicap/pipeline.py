@@ -124,6 +124,7 @@ def ingest_all_pdfs(pdf_dir: Path, db_path: Path) -> IngestStats:
             try:
                 stats = ingest_single_pdf(db, pdf_file)
                 _accumulate_stats(total_stats, stats)
+                db.record_ingested_pdf(pdf_file.name)
             except Exception as e:
                 logger.error("Failed to process %s: %s", pdf_file.name, e)
                 total_stats.pdfs_failed += 1
@@ -156,6 +157,7 @@ def ingest_new_pdfs(pdf_dir: Path, db_path: Path) -> IngestStats:
             try:
                 stats = ingest_single_pdf(db, pdf_file)
                 _accumulate_stats(total_stats, stats)
+                db.record_ingested_pdf(pdf_file.name)
             except Exception as e:
                 logger.error("Failed to process %s: %s", pdf_file.name, e)
                 total_stats.pdfs_failed += 1
@@ -204,6 +206,7 @@ def ingest_all(
                     try:
                         stats = ingest_single_pdf(db, pf)
                         _accumulate_stats(total_stats, stats)
+                        db.record_ingested_pdf(pf.name)
                     except Exception as e:
                         logger.error("Failed to process %s: %s", pf.name, e)
                         total_stats.pdfs_failed += 1

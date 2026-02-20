@@ -53,6 +53,11 @@ CREATE INDEX IF NOT EXISTS idx_time_records_race  ON time_records(race_id);
 CREATE INDEX IF NOT EXISTS idx_races_date         ON races(date);
 CREATE INDEX IF NOT EXISTS idx_races_position     ON races(start_position);
 CREATE INDEX IF NOT EXISTS idx_time_records_rider_race ON time_records(rider_id, race_id);
+
+CREATE TABLE IF NOT EXISTS ingested_pdfs (
+    filename     TEXT PRIMARY KEY,
+    ingested_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
 """
 
 
@@ -76,6 +81,14 @@ class CrestaDB:
         if "scratch_rider_id" not in cols:
             self.conn.execute("ALTER TABLE races ADD COLUMN scratch_rider_id TEXT DEFAULT NULL")
             self.conn.commit()
+
+        # Backfill ingested_pdfs from existing pdf_source entries
+        self.conn.execute("""
+            INSERT OR IGNORE INTO ingested_pdfs (filename)
+            SELECT DISTINCT pdf_source FROM races
+            WHERE pdf_source LIKE '%.pdf'
+        """)
+        self.conn.commit()
 
     # -- Rider --
 
@@ -298,10 +311,15 @@ class CrestaDB:
         return None
 
     def get_ingested_pdf_sources(self) -> set[str]:
-        rows = self.conn.execute(
-            "SELECT DISTINCT pdf_source FROM races WHERE pdf_source != ''"
-        ).fetchall()
+        rows = self.conn.execute("SELECT filename FROM ingested_pdfs").fetchall()
         return {r[0] for r in rows}
+
+    def record_ingested_pdf(self, filename: str) -> None:
+        self.conn.execute(
+            "INSERT OR IGNORE INTO ingested_pdfs (filename) VALUES (?)",
+            (filename,),
+        )
+        self.conn.commit()
 
     # -- Row counts --
 
