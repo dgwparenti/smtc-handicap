@@ -100,13 +100,13 @@ def _inject_custom_css() -> None:
         [data-testid="stMetric"] label {
             color: #6B7280 !important;
             font-weight: 500;
-            font-size: 0.8rem !important;
+            font-size: 0.7rem !important;
         }
 
         [data-testid="stMetric"] [data-testid="stMetricValue"] {
             color: #2C3E6B !important;
             font-weight: 600;
-            font-size: 1.3rem !important;
+            font-size: 1.1rem !important;
         }
 
         /* Captions */
@@ -227,13 +227,13 @@ def main() -> None:
                 st.plotly_chart(fig, use_container_width=True)
                 mc1, mc2 = st.columns(2)
                 mc1.metric(
-                    f"Total runs ({position})",
-                    f"{len(summary.all_times)} (all time)",
+                    "All-time runs",
+                    f"{len(summary.all_times)}",
                     help=f"Total number of {position} runs across all seasons",
                 )
                 mc2.metric(
-                    f"Season runs ({position})",
-                    f"{len(summary.season_times)} ({all_seasons[season_idx][1]})",
+                    "Season runs",
+                    f"{len(summary.season_times)}",
                     help=f"Number of {position} runs in the selected season",
                 )
 
@@ -268,12 +268,12 @@ def main() -> None:
                     f"{field_summary.median_time:.1f}s" if field_summary.median_time else "N/A"
                 )
                 mc1.metric(
-                    f"Estimated time ({position})",
+                    "Est. time",
                     est_str,
                     help="Bayesian model estimate, or median if rider not in model",
                 )
                 mc2.metric(
-                    f"Field median ({position})",
+                    "Field median",
                     med_str,
                     help=f"Median finish time across all {position} riders",
                 )
@@ -306,7 +306,7 @@ def main() -> None:
                 else:
                     hcap_str = "N/A"
                 st.metric(
-                    f"Handicap ({position})",
+                    "Handicap",
                     hcap_str,
                     help="Time difference between compared rider and scratch rider",
                 )

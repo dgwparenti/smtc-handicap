@@ -31,8 +31,8 @@ AXIS_COLOR = "#4A5568"
 GRID_COLOR = "rgba(0,0,0,0.06)"
 AXIS_LINE_COLOR = "#CBD5E0"
 
-CHART_HEIGHT = 350
-CHART_MARGIN = dict(l=50, r=20, t=40, b=50)
+CHART_HEIGHT = 380
+CHART_MARGIN = dict(l=50, r=20, t=40, b=90)
 
 
 def _smoothed_histogram(times: list[float]) -> tuple[np.ndarray, np.ndarray] | None:
@@ -91,10 +91,10 @@ def _base_layout(title: str) -> dict:
             tickfont=dict(size=11, color=AXIS_COLOR),
         ),
         legend=dict(
-            orientation="v",
-            x=0.98,
-            y=0.98,
-            xanchor="right",
+            orientation="h",
+            x=0.5,
+            y=-0.25,
+            xanchor="center",
             yanchor="top",
             bgcolor="rgba(255,255,255,0.9)",
             bordercolor="rgba(0,0,0,0.08)",
@@ -137,6 +137,7 @@ def _add_vline(
     dash: str | None,
     label: str,
     annotate: bool = True,
+    annotation_y: float = 1.0,
 ) -> None:
     """Add a vertical reference line with an optional text annotation."""
     # Dummy trace to ensure x-axis auto-range includes this value
@@ -159,7 +160,7 @@ def _add_vline(
     if annotate:
         fig.add_annotation(
             x=x,
-            y=1.0,
+            y=annotation_y,
             xref="x",
             yref="paper",
             text=f"<b>{label}</b>",
@@ -242,12 +243,30 @@ def plot_rider_performance(summary: RiderTimeSummary) -> go.Figure:
                 )
             )
 
-    # Best-ever line
-    if summary.best_ever is not None:
+    # Best-ever and season-best lines (handle overlap when equal)
+    if summary.best_ever is not None and summary.season_best is not None:
+        if abs(summary.best_ever - summary.season_best) < 0.05:
+            _add_vline(fig, summary.best_ever, GREEN, None, f"Best: {summary.best_ever:.1f}s")
+        else:
+            _add_vline(
+                fig,
+                summary.best_ever,
+                GREEN,
+                None,
+                f"Best ever: {summary.best_ever:.1f}s",
+                annotation_y=1.0,
+            )
+            _add_vline(
+                fig,
+                summary.season_best,
+                RED,
+                "dash",
+                f"Season best: {summary.season_best:.1f}s",
+                annotation_y=0.55,
+            )
+    elif summary.best_ever is not None:
         _add_vline(fig, summary.best_ever, GREEN, None, f"Best ever: {summary.best_ever:.1f}s")
-
-    # Season-best line
-    if summary.season_best is not None:
+    elif summary.season_best is not None:
         _add_vline(
             fig, summary.season_best, RED, "dash", f"Season best: {summary.season_best:.1f}s"
         )
@@ -322,10 +341,13 @@ def plot_rider_vs_field(
 
     # Rider estimated time line
     if rider_summary.estimated_time is not None:
-        label = f"Est. time: {rider_summary.estimated_time:.1f}s"
-        if rider_summary.estimated_source == "empirical":
-            label += " (empirical)"
-        _add_vline(fig, rider_summary.estimated_time, BLUE, None, label)
+        _add_vline(
+            fig,
+            rider_summary.estimated_time,
+            BLUE,
+            None,
+            f"Est: {rider_summary.estimated_time:.1f}s",
+        )
 
     # Field median line
     if field_summary.median_time is not None:
@@ -334,7 +356,7 @@ def plot_rider_vs_field(
             field_summary.median_time,
             GREY,
             "dash",
-            f"Field median: {field_summary.median_time:.1f}s",
+            f"Median: {field_summary.median_time:.1f}s",
         )
 
     layout = _base_layout(title)
