@@ -61,6 +61,9 @@ def check_diagnostics(fit: CmdStanMCMC, stan_data: dict | None = None) -> dict:
         "beta_improve",
         "nu",
     ]
+    # Filter to params actually present in the posterior
+    available = list(idata.posterior.data_vars)
+    key_params = [p for p in key_params if p in available]
     summary = az.summary(idata, var_names=key_params)
 
     max_rhat = summary["r_hat"].max()
