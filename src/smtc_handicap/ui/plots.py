@@ -32,7 +32,7 @@ GRID_COLOR = "rgba(0,0,0,0.06)"
 AXIS_LINE_COLOR = "#CBD5E0"
 
 CHART_HEIGHT = 350
-CHART_MARGIN = dict(l=50, r=20, t=40, b=50)
+CHART_MARGIN = dict(l=50, r=20, t=40, b=80)
 
 
 def _smoothed_histogram(times: list[float]) -> tuple[np.ndarray, np.ndarray] | None:
@@ -91,14 +91,15 @@ def _base_layout(title: str) -> dict:
             tickfont=dict(size=11, color=AXIS_COLOR),
         ),
         legend=dict(
-            x=0.98,
-            y=0.98,
-            xanchor="right",
+            orientation="h",
+            x=0.5,
+            y=-0.18,
+            xanchor="center",
             yanchor="top",
             bgcolor="rgba(255,255,255,0.95)",
             bordercolor="rgba(0,0,0,0.08)",
             borderwidth=1,
-            font=dict(size=11, family=FONT_FAMILY),
+            font=dict(size=10, family=FONT_FAMILY),
         ),
         hoverlabel=dict(
             bgcolor="white",
@@ -415,7 +416,7 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
         if abs(comparison.handicap_value) > 0.01:
             fig.add_annotation(
                 x=mid_x,
-                y=0.85,
+                y=0.93,
                 xref="x",
                 yref="paper",
                 text=f"{hcap_text}<br>{source_text}",
@@ -432,8 +433,8 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
                 type="line",
                 x0=scratch.estimated_time,
                 x1=rider.estimated_time,
-                y0=0.80,
-                y1=0.80,
+                y0=0.85,
+                y1=0.85,
                 xref="x",
                 yref="paper",
                 line=dict(color=AXIS_COLOR, width=1.5),
@@ -441,9 +442,9 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
             # Left arrowhead (pointing at scratch)
             fig.add_annotation(
                 x=scratch.estimated_time,
-                y=0.80,
+                y=0.85,
                 ax=mid_x,
-                ay=0.80,
+                ay=0.85,
                 xref="x",
                 yref="paper",
                 axref="x",
@@ -458,9 +459,9 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
             # Right arrowhead (pointing at rider)
             fig.add_annotation(
                 x=rider.estimated_time,
-                y=0.80,
+                y=0.85,
                 ax=mid_x,
-                ay=0.80,
+                ay=0.85,
                 xref="x",
                 yref="paper",
                 axref="x",
@@ -475,7 +476,7 @@ def plot_handicap_comparison(comparison: HandicapComparison) -> go.Figure:
         else:
             fig.add_annotation(
                 x=mid_x,
-                y=0.85,
+                y=0.93,
                 xref="x",
                 yref="paper",
                 text=f"0.00s<br>{source_text}",

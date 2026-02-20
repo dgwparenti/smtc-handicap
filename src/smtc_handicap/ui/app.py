@@ -212,15 +212,6 @@ def main() -> None:
         )
         scratch_rider_id = rider_ids[scratch_idx]
 
-        compared_idx = st.selectbox(
-            "Compared Rider",
-            range(len(rider_options)),
-            format_func=lambda i: rider_names[i],
-            index=rider_idx,
-            key="compared",
-        )
-        compared_rider_id = rider_ids[compared_idx]
-
     # --- Section 1: Individual Rider Performance ---
     with st.container(border=True):
         st.header("1. Individual Rider Performance")
@@ -290,7 +281,7 @@ def main() -> None:
     # --- Section 3: Handicap Comparison ---
     with st.container(border=True):
         st.header("3. Handicap Comparison")
-        st.caption("How does the compared rider's ability differ from scratch?")
+        st.caption("How does this rider's ability differ from scratch?")
 
         col_top3, col_jct3 = st.columns(2, gap="medium")
 
@@ -299,7 +290,7 @@ def main() -> None:
             comparison = get_handicap_comparison(
                 db,
                 scratch_rider_id,
-                compared_rider_id,
+                selected_rider_id,
                 position,
                 season_year,
                 model,
