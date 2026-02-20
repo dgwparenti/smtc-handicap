@@ -257,8 +257,10 @@ def calculate_handicaps(
     # Shift predicted times to each rider's competitive quantile (p=0.10),
     # using posterior mean of per-rider sigma (not per-draw, to reduce noise).
     # Cap the maximum shift to prevent over-adjustment for very volatile riders.
-    phi_inv_p = -1.4051  # scipy.stats.norm.ppf(0.08)
-    max_shift = -2.5  # Cap: no more than 2.5s quantile adjustment
+    # === TUNABLE PARAMETERS (Ralph Loop optimizes these) ===
+    phi_inv_p = -1.4051  # scipy.stats.norm.ppf(0.08) — lower = more aggressive
+    max_shift = -2.5  # Cap on quantile shift (more negative = less capping)
+    # === END TUNABLE PARAMETERS ===
 
     if posterior.get("sigma_rider") is not None:
         # Use posterior mean of sigma_rider for stable quantile shift

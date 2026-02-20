@@ -188,7 +188,19 @@ def main() -> None:
     print(f"  Model tighter in {n_tighter}/{n_total} races ({pct_tighter:.1f}%)")
     print()
 
-    if avg_model < 1.0:
+    # Exit conditions
+    cond1_pass = avg_model < 1.0
+    cond2_pass = pct_tighter >= 70.0
+
+    print(
+        f"  Condition 1 — avg top-5 range < 1.0s: {'PASS' if cond1_pass else 'FAIL'} ({avg_model:.3f}s)"
+    )
+    print(
+        f"  Condition 2 — tighter in >=70% races: {'PASS' if cond2_pass else 'FAIL'} ({pct_tighter:.1f}%)"
+    )
+    print()
+
+    if cond1_pass and cond2_pass:
         print("PASS")
     else:
         print("FAIL")
