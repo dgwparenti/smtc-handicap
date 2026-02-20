@@ -156,10 +156,7 @@ def _compute_rider_consistency(stan_data: dict, posterior: dict) -> dict[str, fl
     beta_trend_mean = posterior["beta_trend"].mean(axis=0)
     gamma_mean = posterior["gamma"].mean(axis=0)
     beta_imp = posterior["beta_improve"]
-    if beta_imp.ndim == 2:
-        beta_improve_mean = beta_imp.mean(axis=0)  # (J,)
-    else:
-        beta_improve_mean = None  # scalar — use for SL only
+    beta_improve_mean = beta_imp.mean(axis=0) if beta_imp.ndim == 2 else None
     beta_scalar_mean = float(beta_imp.mean()) if beta_imp.ndim == 1 else 0.0
     beta_quad_mean = (
         float(posterior["beta_quad"].mean()) if posterior.get("beta_quad") is not None else 0.0
