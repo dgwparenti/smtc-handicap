@@ -41,9 +41,18 @@ def _extract_from_cmdstanmcmc(fit: CmdStanMCMC) -> dict[str, np.ndarray]:
     gamma = draws[gamma_cols].values  # (D, R)
 
     sigma_obs = draws["sigma_obs"].values  # (D,)
-    beta_improve = draws["beta_improve"].values  # (D,)
     beta_trend_mu = draws["beta_trend_mu"].values  # (D,)
     sigma_trend = draws["sigma_trend"].values  # (D,)
+
+    # Per-rider beta_improve (new) or scalar beta_improve (legacy)
+    beta_improve_cols = sorted(
+        [c for c in draws.columns if c.startswith("beta_improve[")],
+        key=lambda c: int(c.split("[")[1].rstrip("]")),
+    )
+    if beta_improve_cols:
+        beta_improve = draws[beta_improve_cols].values  # (D, J)
+    else:
+        beta_improve = draws["beta_improve"].values  # (D,) — legacy scalar
 
     # Global quadratic season curvature (may not exist in older models)
     beta_quad = draws["beta_quad"].values if "beta_quad" in draws.columns else None  # (D,)
@@ -146,7 +155,12 @@ def _compute_rider_consistency(stan_data: dict, posterior: dict) -> dict[str, fl
     eta_mean = posterior["eta"].mean(axis=0)
     beta_trend_mean = posterior["beta_trend"].mean(axis=0)
     gamma_mean = posterior["gamma"].mean(axis=0)
-    beta_mean = float(posterior["beta_improve"].mean())
+    beta_imp = posterior["beta_improve"]
+    if beta_imp.ndim == 2:
+        beta_improve_mean = beta_imp.mean(axis=0)  # (J,)
+    else:
+        beta_improve_mean = None  # scalar — use for SL only
+    beta_scalar_mean = float(beta_imp.mean()) if beta_imp.ndim == 1 else 0.0
     beta_quad_mean = (
         float(posterior["beta_quad"].mean()) if posterior.get("beta_quad") is not None else 0.0
     )
@@ -164,8 +178,10 @@ def _compute_rider_consistency(stan_data: dict, posterior: dict) -> dict[str, fl
             + beta_quad_mean * season_num[s] ** 2
             + gamma_mean[r]
         )
-        if stan_data["is_sl"][j]:
-            pred += beta_mean * row["run_seq"]
+        if beta_improve_mean is not None:
+            pred += beta_improve_mean[j] * row["run_seq"]
+        elif stan_data["is_sl"][j]:
+            pred += beta_scalar_mean * row["run_seq"]
         residual = row["finish_time"] - pred
         residuals_by_rider.setdefault(rid, []).append(residual)
 
@@ -189,6 +205,8 @@ def calculate_handicaps(
     phi_inv_p: float | None = None,
     max_shift: float | None = None,
     aggregation: str = "median",
+    sigma_shrinkage: float = 1.0,
+    handicap_scale: float = 1.0,
 ) -> pd.DataFrame:
     """Compute handicaps for a field of riders in a given race type.
 
@@ -205,6 +223,9 @@ def calculate_handicaps(
     phi_inv_p : quantile shift multiplier (default: -1.4051)
     max_shift : cap on quantile shift magnitude (default: -2.5)
     aggregation : "median" or "mean" for handicap summarization (default: "median")
+    sigma_shrinkage : how much to use per-rider sigma vs population sigma_obs
+        for the quantile shift. 1.0 = fully per-rider (default), 0.0 = uniform
+        population sigma. Values in between shrink toward the population mean.
 
     Returns
     -------
@@ -262,9 +283,15 @@ def calculate_handicaps(
         if posterior.get("beta_quad") is not None:
             pred_times[:, i] += posterior["beta_quad"] * season_num[s] ** 2
 
-        if info["is_sl"]:
-            next_run = info["max_run_seq"] + 1
-            pred_times[:, i] += posterior["beta_improve"] * next_run
+        # Within-season learning (per-rider or scalar, all riders)
+        next_run = info["max_run_seq"] + 1
+        beta_imp = posterior["beta_improve"]
+        if beta_imp.ndim == 2:
+            # Per-rider beta_improve: (D, J)
+            pred_times[:, i] += beta_imp[:, j] * next_run
+        elif info["is_sl"]:
+            # Legacy scalar beta_improve: only for SL riders
+            pred_times[:, i] += beta_imp * next_run
 
     # Quantile-based consistency adjustment for tighter handicaps.
     # Shift predicted times to each rider's competitive quantile (p=0.10),
@@ -272,7 +299,7 @@ def calculate_handicaps(
     # Cap the maximum shift to prevent over-adjustment for very volatile riders.
     # === TUNABLE PARAMETERS (Ralph Loop optimizes these) ===
     if phi_inv_p is None:
-        phi_inv_p = -1.4051  # scipy.stats.norm.ppf(0.08) — proven optimal
+        phi_inv_p = -1.55  # Optimized via Ralph Loop grid search
     if max_shift is None:
         max_shift = -2.5  # Cap on quantile shift (more negative = less capping)
     # === END TUNABLE PARAMETERS ===
@@ -281,6 +308,10 @@ def calculate_handicaps(
         # Use posterior mean of sigma_rider for stable quantile shift
         sigma_mean = posterior["sigma_rider"].mean(axis=0)  # (J,)
         sigma_arr = np.array([sigma_mean[info["idx"]] for info in riders_info])
+        # Shrink per-rider sigma toward population mean (sigma_obs)
+        if sigma_shrinkage < 1.0:
+            sigma_pop_mean = float(posterior["sigma_obs"].mean())
+            sigma_arr = sigma_shrinkage * sigma_arr + (1.0 - sigma_shrinkage) * sigma_pop_mean
         raw_shift = sigma_arr * phi_inv_p  # negative values
         capped_shift = np.maximum(raw_shift, max_shift)  # cap magnitude
         pred_q = pred_times + capped_shift[np.newaxis, :]
@@ -309,6 +340,8 @@ def calculate_handicaps(
         scratch_idx = int(np.argmin(mean_pred_q))
     scratch_q = pred_q[:, scratch_idx : scratch_idx + 1]  # (D, 1)
     handicaps = pred_q - scratch_q  # (D, n_field)
+    if handicap_scale != 1.0:
+        handicaps *= handicap_scale
     handicaps[:, scratch_idx] = 0.0  # exact zero for scratch rider
 
     # Summaries

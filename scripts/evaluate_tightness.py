@@ -53,6 +53,23 @@ def main() -> None:
         default="median",
         help="Handicap aggregation method (default: median)",
     )
+    parser.add_argument(
+        "--auto-scratch",
+        action="store_true",
+        help="Let model auto-detect scratch rider instead of using committee's",
+    )
+    parser.add_argument(
+        "--sigma-shrinkage",
+        type=float,
+        default=1.0,
+        help="Shrink per-rider sigma toward population mean (1.0=per-rider, 0.0=uniform)",
+    )
+    parser.add_argument(
+        "--handicap-scale",
+        type=float,
+        default=1.0,
+        help="Scale factor for handicap differences (< 1.0 compresses, > 1.0 amplifies)",
+    )
     args = parser.parse_args()
 
     print("=" * 70)
@@ -86,8 +103,9 @@ def main() -> None:
 
     print("\n[3/3] Evaluating tightness...")
     print(
-        f"  Post-processing: phi_inv_p={args.phi_inv_p or -1.4051}, "
-        f"max_shift={args.max_shift or -2.5}, aggregation={args.aggregation}"
+        f"  Post-processing: phi_inv_p={args.phi_inv_p or -1.55}, "
+        f"max_shift={args.max_shift or -2.5}, aggregation={args.aggregation}, "
+        f"handicap_scale={args.handicap_scale}"
     )
     print(f"  Records with committee handicap: {len(handicap_df)}")
 
@@ -108,8 +126,10 @@ def main() -> None:
         season_idx = int(group["season_idx"].iloc[0])
 
         # Find committee-designated scratch rider (handicap == 0.0)
-        scratch_rows = group[group["handicap"] == 0.0]
-        scratch_rider_id = scratch_rows["rider_id"].iloc[0] if len(scratch_rows) > 0 else None
+        scratch_rider_id = None
+        if not args.auto_scratch:
+            scratch_rows = group[group["handicap"] == 0.0]
+            scratch_rider_id = scratch_rows["rider_id"].iloc[0] if len(scratch_rows) > 0 else None
 
         # Calculate Bayesian handicaps
         hcap_df = calculate_handicaps(
@@ -122,6 +142,8 @@ def main() -> None:
             phi_inv_p=args.phi_inv_p,
             max_shift=args.max_shift,
             aggregation=args.aggregation,
+            sigma_shrinkage=args.sigma_shrinkage,
+            handicap_scale=args.handicap_scale,
         )
 
         if len(hcap_df) < MIN_RIDERS_PER_RACE:
