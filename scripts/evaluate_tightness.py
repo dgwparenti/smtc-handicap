@@ -68,8 +68,19 @@ def main() -> None:
         race_type_idx = int(group["race_type_idx"].iloc[0])
         season_idx = int(group["season_idx"].iloc[0])
 
+        # Find committee-designated scratch rider (handicap == 0.0)
+        scratch_rows = group[group["handicap"] == 0.0]
+        scratch_rider_id = scratch_rows["rider_id"].iloc[0] if len(scratch_rows) > 0 else None
+
         # Calculate Bayesian handicaps
-        hcap_df = calculate_handicaps(fit, stan_data, rider_ids, race_type_idx, season_idx)
+        hcap_df = calculate_handicaps(
+            fit,
+            stan_data,
+            rider_ids,
+            race_type_idx,
+            season_idx,
+            scratch_rider_id=scratch_rider_id,
+        )
 
         if len(hcap_df) < MIN_RIDERS_PER_RACE:
             continue

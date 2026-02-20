@@ -139,6 +139,7 @@ def calculate_handicaps(
     field_rider_ids: list[str],
     race_type_idx: int,
     season_idx: int = 1,
+    scratch_rider_id: str | None = None,
 ) -> pd.DataFrame:
     """Compute handicaps for a field of riders in a given race type.
 
@@ -149,6 +150,9 @@ def calculate_handicaps(
     field_rider_ids : list of rider_id strings to include
     race_type_idx : 1-based index into race types
     season_idx : 1-based season index (default 1)
+    scratch_rider_id : if provided, use this rider as scratch (handicap=0).
+        Falls back to auto-detection (fastest predicted) if the rider
+        is not in the field.
 
     Returns
     -------
@@ -237,9 +241,16 @@ def calculate_handicaps(
         pred_q = pred_times + capped_shift[np.newaxis, :]
 
     # Fix scratch rider across all draws to avoid switching noise.
-    # Identify scratch as the rider with lowest mean quantile-adjusted time.
-    mean_pred_q = pred_q.mean(axis=0)  # (n_field,)
-    scratch_idx = int(np.argmin(mean_pred_q))
+    # Use committee-designated scratch if provided, else auto-detect fastest.
+    scratch_idx = None
+    if scratch_rider_id is not None:
+        for i, info in enumerate(riders_info):
+            if info["rider_id"] == scratch_rider_id:
+                scratch_idx = i
+                break
+    if scratch_idx is None:
+        mean_pred_q = pred_q.mean(axis=0)  # (n_field,)
+        scratch_idx = int(np.argmin(mean_pred_q))
     scratch_q = pred_q[:, scratch_idx : scratch_idx + 1]  # (D, 1)
     handicaps = pred_q - scratch_q  # (D, n_field)
     handicaps[:, scratch_idx] = 0.0  # exact zero for scratch rider
