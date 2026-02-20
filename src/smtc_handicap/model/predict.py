@@ -258,8 +258,8 @@ def calculate_handicaps(
     # using posterior mean of per-rider sigma (not per-draw, to reduce noise).
     # Cap the maximum shift to prevent over-adjustment for very volatile riders.
     # === TUNABLE PARAMETERS (Ralph Loop optimizes these) ===
-    phi_inv_p = -1.4051  # scipy.stats.norm.ppf(0.08) — lower = more aggressive
-    max_shift = -2.5  # Cap on quantile shift (more negative = less capping)
+    phi_inv_p = -0.25  # scipy.stats.norm.ppf(~0.40) — lower = more aggressive
+    max_shift = -1.5  # Cap on quantile shift (more negative = less capping)
     # === END TUNABLE PARAMETERS ===
 
     if posterior.get("sigma_rider") is not None:
@@ -299,8 +299,8 @@ def calculate_handicaps(
     # Summaries
     results = []
     for i, info in enumerate(riders_info):
-        # Median for robust handicap estimate (insensitive to extreme draws)
-        h_mean = float(np.median(handicaps[:, i]))
+        # Mean for handicap estimate (responsive to full posterior)
+        h_mean = float(np.mean(handicaps[:, i]))
         h_lo = float(np.percentile(handicaps[:, i], 2.5))
         h_hi = float(np.percentile(handicaps[:, i], 97.5))
         exp_time = float(np.mean(pred_times[:, i]))
