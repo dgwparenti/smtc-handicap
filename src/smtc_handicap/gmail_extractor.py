@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 import requests
-from bs4 import BeautifulSoup
+from bs4 import BeautifulSoup, NavigableString
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
@@ -81,16 +81,20 @@ class GmailExtractor:
     # Email search
     # ------------------------------------------------------------------
 
-    def search_emails(self, after_date: str = "2020/01/01") -> list[str]:
-        """Search for all emails from cresta-run.com.
+    def search_emails(self, after_date: str = "2020/01/01", query: str | None = None) -> list[str]:
+        """Search for emails matching a query.
 
         Args:
             after_date: Only find emails after this date (YYYY/MM/DD format).
+                Ignored when *query* is provided.
+            query: Full Gmail search query. When provided, overrides the
+                default ``from:cresta-run.com after:{after_date}`` query.
 
         Returns:
             List of Gmail message IDs.
         """
-        query = f"from:cresta-run.com after:{after_date}"
+        if query is None:
+            query = f"from:cresta-run.com after:{after_date}"
         message_ids: list[str] = []
         page_token = None
 
@@ -172,7 +176,7 @@ class GmailExtractor:
 
         for link in soup.find_all("a", href=True):
             href = link["href"]
-            link_text = link.get_text(strip=True).lower()
+            link_text = link.get_text(strip=True).lower().rstrip(".,;:!?")
             parent_text = (
                 link.parent.get_text(separator=" ", strip=True).lower() if link.parent else ""
             )
@@ -186,12 +190,20 @@ class GmailExtractor:
                 return href
 
             # Strategy 2: "click here" / "here" — skip draws and unsubscribe
-            if (
-                link_text in ("click here", "here")
-                and "draw" not in parent_text
-                and "unsubscribe" not in parent_text
-            ):
-                return href
+            if link_text in ("click here", "here") and "unsubscribe" not in parent_text:
+                # Check local context (text immediately before this link)
+                # rather than the full parent, which may contain unrelated "draw" mentions
+                preceding_text = ""
+                for sibling in link.previous_siblings:
+                    if isinstance(sibling, NavigableString):
+                        preceding_text = sibling + preceding_text
+                    elif hasattr(sibling, "get_text"):
+                        preceding_text = sibling.get_text() + preceding_text
+                    if len(preceding_text) > 100:
+                        break
+                local_context = preceding_text.lower()
+                if "draw" not in local_context:
+                    return href
 
         return None
 
@@ -272,8 +284,12 @@ class GmailExtractor:
     # Download
     # ------------------------------------------------------------------
 
-    def download_pdf(self, pdf_url: str) -> Path | None:
+    def download_pdf(self, pdf_url: str, *, force: bool = False) -> Path | None:
         """Download a PDF from the CDN URL and save locally.
+
+        Args:
+            pdf_url: Direct URL to the PDF file.
+            force: When True, re-download even if the file already exists.
 
         Returns the path to the saved file, or None if download failed.
         """
@@ -282,7 +298,7 @@ class GmailExtractor:
         clean_name = self.clean_filename(pdf_url)
         output_path = self.output_dir / clean_name
 
-        if output_path.exists():
+        if output_path.exists() and not force:
             logger.info("  Already exists: %s", clean_name)
             return output_path
 
