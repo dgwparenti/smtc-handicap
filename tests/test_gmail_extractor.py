@@ -88,10 +88,11 @@ class TestExtractPdfLink:
 
     def test_trailing_punctuation_in_link_text(self):
         """'click here.' with trailing period should still match."""
-        html = """
+        url = "https://cresta-run.us18.list-manage.com/track/click?u=x&id=results1"
+        html = f"""
         <html><body>
         <p>For today's results please
-          <a href="https://cresta-run.us18.list-manage.com/track/click?u=x&id=results1">click here.</a>
+          <a href="{url}">click here.</a>
         </p>
         </body></html>
         """
@@ -101,14 +102,15 @@ class TestExtractPdfLink:
 
     def test_draw_in_body_but_not_near_results_link(self):
         """Email body mentions 'draw' elsewhere but results link should still be found."""
-        html = """
+        url = "https://cresta-run.us18.list-manage.com/track/click?u=x&id=results2"
+        html = f"""
         <html><body>
         <table><tr><td>
           <h2>SMTC Daily Results</h2>
           <p>Good evening,</p>
           <p>Today we had a great draw for the Brabazon Trophy.</p>
           <p>For today's results please
-            <a href="https://cresta-run.us18.list-manage.com/track/click?u=x&id=results2">click here</a>
+            <a href="{url}">click here</a>
           </p>
           <p>Kind regards,<br>The Secretary</p>
         </td></tr></table>
@@ -120,16 +122,18 @@ class TestExtractPdfLink:
 
     def test_multiple_links_results_before_draw(self):
         """Results link + draw link in same parent — should return results, not draw."""
-        html = """
+        url_results = "https://cresta-run.us18.list-manage.com/track/click?u=x&id=results3"
+        url_draw = "https://cresta-run.us18.list-manage.com/track/click?u=x&id=draw3"
+        html = f"""
         <html><body>
         <table><tr><td>
           <h2>Brabazon Trophy - Results</h2>
           <p>Good evening,</p>
           <p>For today's results please
-            <a href="https://cresta-run.us18.list-manage.com/track/click?u=x&id=results3">click here</a>
+            <a href="{url_results}">click here</a>
           </p>
           <p>For tomorrow's draw please
-            <a href="https://cresta-run.us18.list-manage.com/track/click?u=x&id=draw3">click here</a>
+            <a href="{url_draw}">click here</a>
           </p>
         </td></tr></table>
         </body></html>
