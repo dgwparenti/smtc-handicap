@@ -27,6 +27,11 @@ dev = [
     "pytest",
     "responses",
     "ruff",
+    "httpx",
+]
+api = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
 ]
 ui = [
     "streamlit>=1.30",
