@@ -27,6 +27,11 @@ dev = [
     "pytest",
     "responses",
     "ruff",
+    "httpx",
+]
+api = [
+    "fastapi>=0.110",
+    "uvicorn[standard]>=0.27",
 ]
 ui = [
     "streamlit>=1.30",
@@ -43,6 +48,7 @@ pythonpath = ["src"]
 markers = [
     "integration: tests requiring live Gmail API access (deselect with '-m not integration')",
     "ui: tests requiring UI dependencies — plotly, scipy (deselect with '-m not ui')",
+    "api: tests requiring API dependencies — fastapi, httpx (deselect with '-m not api')",
 ]
 
 [tool.ruff]
