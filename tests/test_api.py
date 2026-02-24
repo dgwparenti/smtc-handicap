@@ -7,16 +7,22 @@ import sqlite3
 from unittest.mock import MagicMock, patch
 
 import pytest
-from fastapi.testclient import TestClient
 
-from smtc_handicap.api import (
+pytest.importorskip("fastapi", reason="fastapi not installed (install with [api])")
+pytest.importorskip("httpx", reason="httpx not installed (install with [dev])")
+
+pytestmark = pytest.mark.api
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from smtc_handicap.api import (  # noqa: E402
     app,
     build_webhook_query,
     get_db,
     get_extractor,
     verify_api_key,
 )
-from smtc_handicap.db import CrestaDB
+from smtc_handicap.db import CrestaDB  # noqa: E402
 
 API_KEY = "test-secret-key"
 

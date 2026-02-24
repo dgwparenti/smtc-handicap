@@ -48,6 +48,7 @@ pythonpath = ["src"]
 markers = [
     "integration: tests requiring live Gmail API access (deselect with '-m not integration')",
     "ui: tests requiring UI dependencies — plotly, scipy (deselect with '-m not ui')",
+    "api: tests requiring API dependencies — fastapi, httpx (deselect with '-m not api')",
 ]
 
 [tool.ruff]
