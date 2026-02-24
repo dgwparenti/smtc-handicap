@@ -9,8 +9,16 @@ Manual handicapping for Cresta Run races relies on committee judgment, which is 
 ```
 Gmail Inbox (Daily Results emails)
     |
-    v
-gmail_extractor — search emails, extract PDF links, download results
+    +------ manual ------+------ automatic ------+
+    |                                             |
+    v                                             v
+gmail_extractor                          Zapier (new email trigger)
+search emails, extract                            |
+PDF links, download                               v
+    |                                   Webhook API (FastAPI)
+    |                                   POST /webhook/ingest
+    |                                             |
+    +---------------------------------------------+
     |
     v
 pdf_parser — parse practice/race/split results from PDFs
@@ -24,6 +32,23 @@ bayesian_model — fit rider ability distributions, generate handicaps
     v
 Output — Excel/CSV handicap sheets for committee
 ```
+
+## Webhook API
+
+Automatic ingestion of new results via a webhook triggered by Zapier when a
+new Daily Results email arrives.
+
+```bash
+# Install API dependencies
+pip install -e ".[api]"
+
+# Start the server
+export SMTC_API_KEY=$(cat credentials/api_key.txt)
+uvicorn smtc_handicap.api:app --host 0.0.0.0 --port 8000
+```
+
+See [docs/api.md](docs/api.md) for the full API reference, deployment setup,
+and Zapier integration guide.
 
 ## Setup
 
