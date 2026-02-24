@@ -147,6 +147,32 @@ class TestTimeRecordCRUD:
         assert len(records) == 1
 
 
+class TestDeleteByPdfSource:
+    def test_deletes_races_and_records(self, db, sample_rider, sample_race, sample_record):
+        db.upsert_rider(sample_rider)
+        db.insert_race(sample_race)
+        db.insert_time_record(sample_record)
+
+        deleted = db.delete_by_pdf_source("test.pdf")
+
+        assert deleted == 1
+        assert db.get_race(sample_race.race_id) is None
+        assert db.get_time_records_for_race(sample_race.race_id) == []
+
+    def test_unknown_source_returns_zero(self, db):
+        deleted = db.delete_by_pdf_source("nonexistent.pdf")
+        assert deleted == 0
+
+    def test_riders_preserved(self, db, sample_rider, sample_race, sample_record):
+        db.upsert_rider(sample_rider)
+        db.insert_race(sample_race)
+        db.insert_time_record(sample_record)
+
+        db.delete_by_pdf_source("test.pdf")
+
+        assert db.get_rider(sample_rider.rider_id) is not None
+
+
 class TestCounts:
     def test_empty_db_counts(self, db):
         counts = db.get_counts()

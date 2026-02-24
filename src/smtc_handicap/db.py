@@ -303,6 +303,32 @@ class CrestaDB:
         ).fetchall()
         return {r[0] for r in rows}
 
+    def delete_by_pdf_source(self, pdf_source: str) -> int:
+        """Delete all races and time records originating from a PDF source.
+
+        Riders are intentionally left intact (shared across races).
+
+        Returns the number of time records deleted.
+        """
+        race_ids = [
+            row[0]
+            for row in self.conn.execute(
+                "SELECT race_id FROM races WHERE pdf_source = ?", (pdf_source,)
+            ).fetchall()
+        ]
+        if not race_ids:
+            return 0
+
+        placeholders = ",".join("?" * len(race_ids))
+        cursor = self.conn.execute(
+            f"DELETE FROM time_records WHERE race_id IN ({placeholders})",  # noqa: S608
+            race_ids,
+        )
+        deleted = cursor.rowcount
+        self.conn.execute("DELETE FROM races WHERE pdf_source = ?", (pdf_source,))
+        self.conn.commit()
+        return deleted
+
     # -- Row counts --
 
     def get_counts(self) -> dict[str, int]:
