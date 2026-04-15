@@ -188,3 +188,82 @@ class TestCounts:
         assert counts["riders"] == 1
         assert counts["races"] == 1
         assert counts["time_records"] == 1
+
+
+class TestGetRacesByPosition:
+    def test_returns_top_races_sorted_by_date_desc(self, db):
+        db.insert_race(
+            Race(
+                race_id="HANDICAP_TOP_2026-01-15",
+                name="HANDICAP",
+                date=datetime.date(2026, 1, 15),
+                start_position="TOP",
+                is_handicap_race=True,
+                is_practice=False,
+            )
+        )
+        db.insert_race(
+            Race(
+                race_id="HANDICAP_JUNCTION_2026-01-20",
+                name="HANDICAP",
+                date=datetime.date(2026, 1, 20),
+                start_position="JUNCTION",
+                is_handicap_race=True,
+                is_practice=False,
+            )
+        )
+        db.insert_race(
+            Race(
+                race_id="PRACTICE_TOP_2026-01-10",
+                name="PRACTICE",
+                date=datetime.date(2026, 1, 10),
+                start_position="TOP",
+                is_handicap_race=False,
+                is_practice=True,
+            )
+        )
+
+        top_races = db.get_races_by_position("TOP")
+
+        assert len(top_races) == 2
+        assert top_races[0].race_id == "HANDICAP_TOP_2026-01-15"
+        assert top_races[0].date == datetime.date(2026, 1, 15)
+        assert top_races[1].race_id == "PRACTICE_TOP_2026-01-10"
+        assert top_races[1].date == datetime.date(2026, 1, 10)
+
+    def test_returns_junction_races(self, db):
+        db.insert_race(
+            Race(
+                race_id="HANDICAP_TOP_2026-01-15",
+                name="HANDICAP",
+                date=datetime.date(2026, 1, 15),
+                start_position="TOP",
+                is_handicap_race=True,
+                is_practice=False,
+            )
+        )
+        db.insert_race(
+            Race(
+                race_id="HANDICAP_JUNCTION_2026-01-20",
+                name="HANDICAP",
+                date=datetime.date(2026, 1, 20),
+                start_position="JUNCTION",
+                is_handicap_race=True,
+                is_practice=False,
+            )
+        )
+        db.insert_race(
+            Race(
+                race_id="PRACTICE_TOP_2026-01-10",
+                name="PRACTICE",
+                date=datetime.date(2026, 1, 10),
+                start_position="TOP",
+                is_handicap_race=False,
+                is_practice=True,
+            )
+        )
+
+        junction_races = db.get_races_by_position("JUNCTION")
+
+        assert len(junction_races) == 1
+        assert junction_races[0].race_id == "HANDICAP_JUNCTION_2026-01-20"
