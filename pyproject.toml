@@ -52,3 +52,6 @@ line-length = 99
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "N", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/smtc_handicap/ui/pages/*.py" = ["N999"]
