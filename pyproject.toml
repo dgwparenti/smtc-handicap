@@ -32,6 +32,7 @@ ui = [
     "streamlit>=1.30",
     "plotly>=5.18",
     "scipy>=1.11",
+    "openpyxl",
 ]
 
 [tool.hatch.build.targets.wheel]
