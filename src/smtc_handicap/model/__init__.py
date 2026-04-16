@@ -7,7 +7,9 @@ from pathlib import Path
 from smtc_handicap.model.data_prep import build_stan_data
 from smtc_handicap.model.diagnostics import check_diagnostics, save_inference_data
 from smtc_handicap.model.fit import compile_model, fit_model
+from smtc_handicap.model.handicap_optimizer import optimize_handicaps
 from smtc_handicap.model.predict import calculate_handicaps
+from smtc_handicap.model.race_simulator import build_prediction_arrays, simulate_race
 
 
 def run_model(
@@ -68,11 +70,14 @@ def run_model(
 
 
 __all__ = [
+    "build_prediction_arrays",
     "build_stan_data",
     "calculate_handicaps",
     "check_diagnostics",
     "compile_model",
     "fit_model",
+    "optimize_handicaps",
     "run_model",
     "save_inference_data",
+    "simulate_race",
 ]

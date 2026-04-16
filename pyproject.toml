@@ -37,6 +37,7 @@ ui = [
     "streamlit>=1.30",
     "plotly>=5.18",
     "scipy>=1.11",
+    "openpyxl",
 ]
 
 [tool.hatch.build.targets.wheel]
@@ -57,3 +58,6 @@ line-length = 99
 
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "N", "UP", "B", "SIM"]
+
+[tool.ruff.lint.per-file-ignores]
+"src/smtc_handicap/ui/pages/*.py" = ["N999"]

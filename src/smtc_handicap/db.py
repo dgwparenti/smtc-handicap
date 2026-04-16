@@ -190,6 +190,30 @@ class CrestaDB:
             pdf_source=row[7],
         )
 
+    def get_races_by_position(self, start_position: str) -> list[Race]:
+        """Return all races for a position, sorted by date descending."""
+        rows = self.conn.execute(
+            """SELECT race_id, name, date, start_position,
+                      is_handicap_race, is_practice, day_number, pdf_source
+               FROM races
+               WHERE start_position = ?
+               ORDER BY date DESC""",
+            (start_position,),
+        ).fetchall()
+        return [
+            Race(
+                race_id=r[0],
+                name=r[1],
+                date=datetime.date.fromisoformat(r[2]),
+                start_position=r[3],
+                is_handicap_race=bool(r[4]),
+                is_practice=bool(r[5]),
+                day_number=r[6],
+                pdf_source=r[7] or "",
+            )
+            for r in rows
+        ]
+
     def race_exists(self, race_id: str) -> bool:
         row = self.conn.execute("SELECT 1 FROM races WHERE race_id=?", (race_id,)).fetchone()
         return row is not None

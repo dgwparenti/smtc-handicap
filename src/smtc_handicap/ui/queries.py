@@ -299,3 +299,86 @@ def get_handicap_comparison(
         handicap_value=handicap_value,
         handicap_source=handicap_source,
     )
+
+
+# ---------------------------------------------------------------------------
+# Handicap Planner helpers
+# ---------------------------------------------------------------------------
+
+
+def match_riders_from_names(
+    db: CrestaDB,
+    names: list[str],
+) -> tuple[list[tuple[str, str]], list[str]]:
+    """Match uploaded display names to rider_ids in the database.
+
+    Tries exact display_name match first (case-insensitive), then falls back
+    to comparing normalized rider_ids.
+
+    Returns (matched, unmatched) where matched is [(rider_id, display_name), ...]
+    and unmatched is [name, ...] that couldn't be resolved.
+    """
+    from smtc_handicap.name_normalizer import normalize_rider_id
+
+    all_riders = db.get_all_riders()
+    by_display = {r.display_name.strip().lower(): (r.rider_id, r.display_name) for r in all_riders}
+    by_normalized = {r.rider_id: (r.rider_id, r.display_name) for r in all_riders}
+
+    matched = []
+    unmatched = []
+
+    for name in names:
+        name_stripped = name.strip()
+        if not name_stripped:
+            continue
+        key = name_stripped.lower()
+        if key in by_display:
+            matched.append(by_display[key])
+            continue
+        try:
+            normalized = normalize_rider_id(name_stripped)
+            if normalized in by_normalized:
+                matched.append(by_normalized[normalized])
+                continue
+        except ValueError:
+            pass
+        unmatched.append(name_stripped)
+
+    return matched, unmatched
+
+
+def get_races_for_position(
+    db: CrestaDB,
+    position: str,
+) -> list[tuple[str, str]]:
+    """Return (race_id, label) for races at a position, most recent first.
+
+    Label format: "RACE NAME — 2026-02-08"
+    """
+    races = db.get_races_by_position(position)
+    return [(r.race_id, f"{r.name} — {r.date.isoformat()}") for r in races]
+
+
+def load_planner_posterior(nc_path: str | Path) -> tuple[dict, dict]:
+    """Load posterior samples and metadata from a .nc model file.
+
+    Returns (posterior, metadata) where:
+    - posterior: dict from get_posterior_samples (numpy arrays)
+    - metadata: dict with rider_map, race_type_map, season_num
+    """
+    import arviz as az
+
+    from smtc_handicap.model.predict import get_posterior_samples
+
+    idata = az.from_netcdf(str(nc_path))
+    posterior = get_posterior_samples(idata)
+
+    rider_map = json.loads(idata.attrs.get("rider_map", "{}"))
+    race_type_map = json.loads(idata.attrs.get("race_type_map", "{}"))
+    season_num = idata.constant_data["season_num"].values
+
+    return posterior, {
+        "rider_map": rider_map,
+        "race_type_map": race_type_map,
+        "season_num": season_num,
+    }
