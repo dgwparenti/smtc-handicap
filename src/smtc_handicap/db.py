@@ -303,28 +303,6 @@ class CrestaDB:
         )
         self.conn.commit()
 
-    def get_races_by_position(self, position: str) -> list[Race]:
-        """Return all races at a given start position, sorted by date DESC."""
-        rows = self.conn.execute(
-            "SELECT race_id, name, date, start_position, is_handicap_race, "
-            "is_practice, day_number, pdf_source FROM races "
-            "WHERE start_position=? ORDER BY date DESC",
-            (position,),
-        ).fetchall()
-        return [
-            Race(
-                race_id=r[0],
-                name=r[1],
-                date=datetime.date.fromisoformat(r[2]),
-                start_position=r[3],
-                is_handicap_race=bool(r[4]),
-                is_practice=bool(r[5]),
-                day_number=r[6],
-                pdf_source=r[7],
-            )
-            for r in rows
-        ]
-
     def get_scratch_rider(self, race_id: str) -> str | None:
         """Get the scratch rider_id for a race, or None."""
         row = self.conn.execute(
