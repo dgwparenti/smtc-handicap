@@ -183,14 +183,21 @@ CANONICAL_RACES = [
     ("seniors-stream", "Seniors From Stream", "SENIORS STREAM", "JUNCTION", False, ""),
     ("bonsai", "Bonsai Challenge", "BONSAI", "JUNCTION", False, ""),
     ("prince-philip", "Prince Philip Trophy", "PRINCE PHILIP", "TOP", False, ""),
-    ("bucherer", "Bucherer Trophy", "BUCHERER", "TOP", False, ""),
+    (
+        "bucherer",
+        "Bucherer Trophy",
+        "BUCHERER / ADJUNCT",
+        "JUNCTION",
+        False,
+        "JUNCTION handicap; known as 'ADJUNCT' on website 2021/22–2024/25, 'JUNCTION H'CAP' in 2019/20; officially renamed Bucherer Trophy from 2024/25. Confirmed JUNCTION on cresta-run.com event page.",
+    ),
     (
         "lowe-portago",
-        "Lowe Portago Challenge Cup",
+        "Marques de Portago Challenge",
         "LOWE PORTAGO",
         "TOP",
         False,
-        "Position uncertain; appears in web log but few PDF results",
+        "Full official name: Marques de Portago Challenge; short form 'Lowe Portago' used in PDFs and web log",
     ),
     ("cresta-family", "Cresta Family Cup", "FAMILY", "TOP", False, ""),
     (
@@ -219,7 +226,14 @@ CANONICAL_RACES = [
         False,
         "Combined TOP/JUNCTION format",
     ),
-    ("adjunct", "Adjunct", "ADJUNCT", "BOTH", False, "Adjunct event; position varies"),
+    (
+        "adjunct",
+        "Adjunct / Miscellaneous",
+        "ADJUNCT",
+        "BOTH",
+        False,
+        "Catch-all for one-off prizes and unclassified events (Ralph Hubbard Prize, Speed Cup, etc.). NOTE: the ADJUNCT label on the cresta-run.com calendar refers to the Bucherer Trophy (bucherer key), not this entry.",
+    ),
     ("international", "International", "INTERNATIONAL", "TOP", False, ""),
     ("f-s-bros", "F&S and Bros", "F&S and BROS", "TOP", False, ""),
     ("seiler", "Seiler", "SEILER", "TOP", False, ""),
@@ -379,10 +393,9 @@ RAW_NAME_MAP = {
     # Children's
     "Children's Race": "children",
     "Members' Children's Race": "children",
-    # Misc / one-offs that appear in DB (possibly noise or rarely-run)
-    "BUCHERER TROPHY": "bucherer",
-    "Ralph Hubbard Prize": "adjunct",  # one-off prize within another race
-    "Ronnie Ramsay Rae Memorial Trophy": "adjunct",  # one-off
+    # One-off prizes awarded within other race days (catch-all)
+    "Ralph Hubbard Prize": "adjunct",
+    "Ronnie Ramsay Rae Memorial Trophy": "adjunct",
     "Speed Cup": "adjunct",
     # Unicode curly-apostrophe variants (same races, different encoding in source PDFs)
     "COPPA d’ITALIA": "coppa-ditalia",
