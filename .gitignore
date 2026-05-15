@@ -211,3 +211,6 @@ credentials/
 
 # Data pipeline
 data/
+
+# Git worktrees
+.worktrees/
