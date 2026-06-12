@@ -1,42 +1,45 @@
 # Progress
 
-## Current Branch: `feature/json-ingestion`
+## Current Branch: `ui-design`
 
-### Completed
+Off `develop`. Holds the design spec for the next major piece of work: the **Handicap Engine** — a pre-race decision tool that replaces the existing Handicap Explorer. Implementation plan not yet written.
 
-- **PDF parsing pipeline** — Built end-to-end pipeline: PDF text extraction (`pdf_parser.py`), filename parsing (`filename_parser.py`), name normalization (`name_normalizer.py`), SQLite storage (`db.py`), and orchestrator (`pipeline.py`). 19 PDFs → 36 races, 620 riders, 3480 time records with 0 orphans.
-- **Data models** — `Race`, `Rider`, `TimeRecord` dataclasses in `models.py`
-- **Unit tests** — 113 tests covering parsing, normalization, DB, pipeline, and model data prep
-- **UI specification** — Handicap Explorer Streamlit app spec with KDE bell curves
-- **Dev tooling** — Pre-push hook (ruff check + format --check), pre-commit hook (auto-format staged Python files with ruff), lint fixes
-- **Project config** — CLAUDE.md with branch workflow and progress tracking instructions
-- **Bayesian handicap model** — Hierarchical Stan model for computing rider handicaps:
-  - Stan model (`cresta_handicap.stan`): non-centered parameterization, population/rider/season/race-type hierarchy, SL improvement trend, shared sigma_obs
-  - Data prep (`model/data_prep.py`): SQLite → Stan data dict with outlier filtering, min_runs filtering, contiguous index mapping
-  - Fit (`model/fit.py`): CmdStanPy compilation and MCMC sampling (adapt_delta=0.9, max_treedepth=12)
-  - Diagnostics (`model/diagnostics.py`): R-hat, ESS, divergence checks via arviz
-  - Predict (`model/predict.py`): Posterior handicap calculation with credible intervals, post-hoc per-rider consistency
-  - Both TOP (N=1220, J=174, R=8) and JUNCTION (N=1528, J=264, R=3) models converge cleanly: R-hat=1.000, ESS>900, 0 divergences, ~5-8s runtime
-- **JSON ingestion plan approved** — Plan transcript: `1270f3a9-2870-46dc-8450-970e919c920e.jsonl`
-- **Branch `feature/json-ingestion` created**, all key source files read and JSON structure inspected
+### Just Committed
 
-### JSON Ingestion — Not Yet Implemented
+- **Handicap engine design spec** — `docs/superpowers/specs/2026-06-12-handicap-engine-design.md` (commit `3e365d4`). Covers: new per-course hierarchical Bayesian model (TOP + JUNCTION), Monte Carlo simulator + greedy optimizer, objective slider (tight finish ↔ volatile leaderboard), Streamlit UI shaped for a future React port, `handicap_decisions` persistence. Brainstormed via superpowers:brainstorming.
 
-Branch created and plan approved, but no code written yet. Key files to create/modify:
-- **NEW**: `src/smtc_handicap/json_parser.py`
-- **MODIFY**: `src/smtc_handicap/pipeline.py` (add `ingest_single_json`, `ingest_all_jsons`)
-- **MODIFY**: `scripts/ingest_pdfs.py` (add `--json-dir` argument)
-- **MODIFY**: `src/smtc_handicap/pdf_parser.py` (extract `_make_race_id()` to be importable)
+### Previously Completed (merged to `develop`)
+
+- **PDF + JSON ingestion pipeline** — `pdf_parser.py`, `json_parser.py`, `filename_parser.py`, `name_normalizer.py`, `pipeline.py`. JSONs ingested first for richer data (splits, speeds, start times). Current DB: 525 races, 3276 riders, 53788 time records, 0 orphans.
+- **Bayesian handicap model (finish-time)** — Stan model `cresta_handicap.stan`, fit script `scripts/fit_model.py --position {TOP,JUNCTION}`. TOP fit currently in PASS state (avg range 0.969s, win rate 72.7%) after power-law compression tuning across 9 Ralph Loop iterations. JUNCTION fit exists but needs re-fit with updated code.
+- **Handicap Explorer UI** — Streamlit app at `src/smtc_handicap/ui/app.py` (3-layer: queries → plots → app). To be replaced by the handicap engine UI per the new spec.
+- **Gmail integration** — `gmail_extractor.py` + `scripts/fetch_and_ingest.py`. Fetches timesheet PDFs, supports re-ingestion via `delete_by_pdf_source`.
+- **Webhook API** — FastAPI service for Gmail PDF extraction and ingestion. Provides the precedent for the future engine HTTP layer.
+- **Marsden Cup + Coppa analyses** — `scripts/marsden_cup_analysis.py`, `scripts/coppa_bayesian_handicaps.py`. Source of the naive-equalizing-handicap heuristic the new optimizer will reuse as a seed.
+- **Dev tooling** — Pre-push hook (ruff check + format), pre-commit hook (auto-format staged Python).
+
+### Handicap Engine — Not Yet Implemented
+
+Design spec approved; implementation plan still to be written via superpowers:writing-plans. Build order per §11 of the spec:
+
+1. Migration: add `handicap_decisions` + `handicap_decision_rows` tables in `db.py`.
+2. Extend `model/data_prep.py` for per-course design matrices.
+3. New Stan model `model/stan/cresta_course.stan`; fit script `scripts/fit_course_model.py`; validate against §6.5 gates (R-hat < 1.05, < 1% divergences, ≥ 80% PPC coverage on held-out races).
+4. New engine package `src/smtc_handicap/handicap/`: `metrics.py` → `simulator.py` → `optimizer.py`. Pure Python, no UI deps.
+5. Extend `ui/queries.py` with per-course helpers + decision persistence.
+6. Rewrite `ui/app.py` around the component decomposition in §8 of the spec. Drop Explorer-only plots/queries.
+7. Manual UI smoke test; update memory.
 
 ### Next Session TODO
 
-1. **Implement JSON ingestion** — write `json_parser.py`, update pipeline and CLI script
-2. **Wipe DB and run full ingestion** from 329 JSONs + 440 PDFs
-3. **Verify data** — spot-check JSON-sourced and PDF-only races
-4. **Retrain the Bayesian handicap model** with the expanded dataset
+1. User reviews the design spec and approves or requests changes.
+2. Invoke superpowers:writing-plans to produce the implementation plan.
+3. Decide branch strategy for implementation (per CLAUDE.md): new feature branch off `develop`, or continue on `ui-design`.
+4. Merge `feature/improve-top-model-tightness` into `develop` (still 11 commits ahead per memory).
+5. Re-fit JUNCTION finish-time model with updated code (separate from the new course-level model the spec calls for).
 
 ### Observations / Known Issues
 
-- `sigma_obs=15.0` hits the upper bound for TOP model — suggests high residual variance in the data (diverse rider population). May warrant investigation or a higher cap.
-- With S=1 (single season), the season component is effectively disabled via tight prior (sigma_season_sd=0.01). Will become useful when multi-season data is available.
-- `beta_improve ≈ -0.05` for SL riders — slight improvement per run but credible interval crosses zero with current data.
+- Existing TOP/JUNCTION finish-time models stay in place — other scripts (`fit_model.py`, `evaluate_tightness.py`, `marsden_cup_analysis.py`, `coppa_bayesian_handicaps.py`) keep using them. The new course-level models are parallel, not a replacement.
+- `race_id` is nullable on `handicap_decisions` so the committee can handicap a race before it exists in the DB. Reconciliation with later-ingested race PDFs is deferred.
+- Streamlit `st.data_editor` is the implementation target for the draw table; will need to verify autocomplete + per-row scratch radio work cleanly inside it.
